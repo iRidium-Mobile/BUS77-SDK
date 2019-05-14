@@ -35,6 +35,19 @@ CIridiumBusProtocol::CIridiumBusProtocol() : CIridiumProtocol()
 
    // Сброс данных
    Reset();
+
+   // Инициализация параметров протокола
+   m_OutPH.m_u8Type              = IRIDIUM_BUS_PROTOCOL_ID;
+   m_OutPH.m_Flags.m_bPriority   = false;
+   m_OutPH.m_Flags.m_bSegment    = false;
+   m_OutPH.m_Flags.m_bAddress    = true;
+   m_OutPH.m_Flags.m_u2Version   = IRIDIUM_PROTOCOL_BUS_VERSION;
+   m_OutPH.m_Flags.m_u3Crypt     = IRIDIUM_CRYPTION_NONE;
+   m_OutPH.m_SrcAddr             = 0;
+   m_OutPH.m_DstAddr             = 0;
+
+   // Сброс идентификатора транзакции
+   m_u16TID = 0;
 }
 
 /**
@@ -78,7 +91,7 @@ bool CIridiumBusProtocol::SendSearchRequest(iridium_address_t in_DstAddr, u8 in_
    // Заполнение заголовка пакета
    m_OutPH.m_Flags.m_bSegment    = (0 != (in_DstAddr & 0xFF00));
    m_OutPH.m_DstAddr             = in_DstAddr & ~0xFF;
-   m_OutPH.m_Flags.m_bAddress    = false; // Запрос всегда широковещательный
+   m_OutPH.m_Flags.m_bAddress    = false;
 
    // Заполнение заголовка сообщения
    m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
@@ -115,7 +128,7 @@ bool CIridiumBusProtocol::SendSetLIDRequest(iridium_address_t in_DstAddr, const 
    // Заполнение заголовка пакета
    m_OutPH.m_Flags.m_bSegment    = (0 != (in_DstAddr & 0xFF00));
    m_OutPH.m_DstAddr             = in_DstAddr & ~0xFF;
-   m_OutPH.m_Flags.m_bAddress    = false; // Запрос всегда широковещательный
+   m_OutPH.m_Flags.m_bAddress    = false;
 
    // Заполнение заголовка сообщения
    m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;

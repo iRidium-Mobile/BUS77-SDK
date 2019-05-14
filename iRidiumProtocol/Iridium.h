@@ -210,44 +210,6 @@ typedef struct iridium_device_info_s
 #endif
 } iridium_device_info_t;
 
-// Структура данных канала обратной связи
-typedef struct iridium_tag_info_s
-{
-   u32               m_u32ID;                      // Идентификатор канала обратной связи
-   char*             m_pszName;                    // Указатель на имя тега
-   u8                m_u8Type;                     // Тип значения
-   universal_value_t m_Value;                      // Данные значения
-   
-#ifdef IRIDIUM_AVR_PLATFORM
-   // Структра для хранения типа памяти в которой хранятся данные
-   // false - данные в оперативной памяти
-   // true  - данные в flash памяти
-   struct
-   {
-      unsigned m_bName;                            // Тип памяти где расположено имя канала обратной связи
-   } Mem;
-#endif
-} iridium_tag_info_t;
-
-// Структура данных канала управления
-typedef struct iridium_channel_info_s
-{
-   u32               m_u32ID;                      // Идентификатор канала управления
-   char*             m_pszName;                    // Указатель на имя канала управления
-   u8                m_u8Type;                     // Тип значения
-   universal_value_t m_Value;                      // Данные значения
-
-#ifdef IRIDIUM_AVR_PLATFORM
-   // Структра для хранения типа памяти в которой хранятся данные
-   // false - данные в оперативной памяти
-   // true  - данные в flash памяти
-   struct
-   {
-      unsigned m_bName;                            // Тип памяти где расположено имя канала управления
-   } Mem;
-#endif
-} iridium_channel_info_t;
-
 // Структура описания общих параметров канала
 typedef struct iridium_description_s
 {
@@ -268,6 +230,25 @@ typedef struct iridium_description_s
 #endif
 } iridium_description_t;
 
+// Структура данных канала обратной связи
+typedef struct iridium_tag_info_s
+{
+   u32               m_u32ID;                      // Идентификатор канала обратной связи
+   char*             m_pszName;                    // Указатель на имя тега
+   u8                m_u8Type;                     // Тип значения
+   universal_value_t m_Value;                      // Данные значения
+   
+#ifdef IRIDIUM_AVR_PLATFORM
+   // Структра для хранения типа памяти в которой хранятся данные
+   // false - данные в оперативной памяти
+   // true  - данные в flash памяти
+   struct
+   {
+      unsigned m_bName;                            // Тип памяти где расположено имя канала обратной связи
+   } Mem;
+#endif
+} iridium_tag_info_t;
+
 // Структура описания списка флагов канала обратной связи
 typedef struct itd_flags_s
 {
@@ -281,6 +262,25 @@ typedef struct iridium_tag_description_s
    itd_flags_t             m_Flags;                // Список флагов
    u16                     m_u16Variable;          // Идентификатор глобальной переменной связанной с каналом обратной связи
 } iridium_tag_description_t;
+
+// Структура данных канала управления
+typedef struct iridium_channel_info_s
+{
+   u32               m_u32ID;                      // Идентификатор канала управления
+   char*             m_pszName;                    // Указатель на имя канала управления
+   u8                m_u8Type;                     // Тип значения
+   universal_value_t m_Value;                      // Данные значения
+
+#ifdef IRIDIUM_AVR_PLATFORM
+   // Структра для хранения типа памяти в которой хранятся данные
+   // false - данные в оперативной памяти
+   // true  - данные в flash памяти
+   struct
+   {
+      unsigned m_bName;                            // Тип памяти где расположено имя канала управления
+   } Mem;
+#endif
+} iridium_channel_info_t;
 
 // Структура описания списка флагов канала управления
 typedef struct icd_flags_s

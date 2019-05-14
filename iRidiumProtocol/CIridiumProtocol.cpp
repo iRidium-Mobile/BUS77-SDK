@@ -1300,44 +1300,40 @@ void CIridiumProtocol::ReceiveSetChannelValueRequest()
 bool CIridiumProtocol::SendLinkChannelAndVariableRequest(iridium_address_t in_DstAddr, u32 in_u32ChannelID, u8 in_u8Variables, u16* in_pVariables, u32 in_u32PIN)
 {
    u8 l_u8Temp = 0;
-   bool l_bResult = false;
-   // Проверка количества переменных
-   if(in_u8Variables > IRIDIUM_MAX_VARIABLES)
-      in_u8Variables = IRIDIUM_MAX_VARIABLES;
 
-   // Проверка входных параметров
+   // Заполнение данных пакета
+   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_LINK_CHANNEL_AND_VARIABLE);
+   // Начало работы с пакетом
+   Begin();
+   // Добавление идентификатора канала управления
+   m_pOutMessage->AddU32LE(in_u32ChannelID);
+   // Зарезервируем место под флаги
+   m_pOutMessage->CreateAnchorU8();
+   // Добавление PIN кода
+   if(in_u32PIN)
+   {
+      m_pOutMessage->AddU32LE(in_u32PIN);
+      // Отметим наличие PIN кода
+      l_u8Temp = 0x40;
+   }
+   // Проверка наличия списка глобальных переменных
    if(in_u8Variables && in_pVariables)
    {
-      // Заполнение данных пакета
-      InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_LINK_CHANNEL_AND_VARIABLE);
-      // Начало работы с пакетом
-      Begin();
-      // Добавление идентификатора канала управления
-      m_pOutMessage->AddU32LE(in_u32ChannelID);
-      // Зарезервируем место под флаги
-      m_pOutMessage->CreateAnchorU8();
-      // Добавление PIN кода
-      if(in_u32PIN)
-      {
-         m_pOutMessage->AddU32LE(in_u32PIN);
-         // Отметим наличие PIN кода
-         l_u8Temp = 0x40;
-      }
-      // Добавление идентификатора переменной
-      if(in_u8Variables)
-      {
-         for(u8 i = 0; i < in_u8Variables; i++)
-            m_pOutMessage->AddU16LE(in_pVariables[i]);
-         // Отметим наличие данных
-         l_u8Temp |= (0x80 | (in_u8Variables - 1) & 0x1f);
-      }
-
-      // Добавление списка флагов
-      m_pOutMessage->SetAnchorU8Value(l_u8Temp);
-      // Окончание работы и отправка пакета
-      l_bResult = End();
+      // Проверка максимального количества переменных
+      if(in_u8Variables > IRIDIUM_MAX_VARIABLES)
+         in_u8Variables = IRIDIUM_MAX_VARIABLES;
+   
+      // Добавление списка глобальных переменных
+      for(u8 i = 0; i < in_u8Variables; i++)
+         m_pOutMessage->AddU16LE(in_pVariables[i]);
+      // Отметим наличие данных
+      l_u8Temp |= (0x80 | (in_u8Variables - 1) & 0x1f);
    }
-   return l_bResult;
+
+   // Добавление списка флагов
+   m_pOutMessage->SetAnchorU8Value(l_u8Temp);
+   // Окончание работы и отправка пакета
+   return End();
 }
 
 /**

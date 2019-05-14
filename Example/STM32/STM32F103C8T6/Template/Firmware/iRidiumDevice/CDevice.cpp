@@ -948,7 +948,7 @@ bool CDevice::GetVariable(u16 in_u16VariableID, u8& out_rType, universal_value_t
       for(u8 i = 0; i < MAX_DEVICE_TAGS; i++)
       {
          // Вычисление индекса и маски
-         u8 l_u8Index = i >> 8;
+         u8 l_u8Index = i >> 3;
          u8 l_u8Mask = 1 << (i & 0x7);
          // Проверка владеет ли устройство переменной
          if((g_aTagOwners[l_u8Index] & l_u8Mask) && g_aTagsVariable[i] == in_u16VariableID)
@@ -1081,7 +1081,7 @@ bool CDevice::LinkTagAndVariable(u32 in_u32TagID, bool in_bOwner, u16 in_u16Vari
    size_t l_stIndex = GetTagIndex(in_u32TagID);
    if(l_stIndex != (size_t)-1)
    {
-      u8 l_u8Index = l_stIndex >> 8;
+      u8 l_u8Index = l_stIndex >> 3;
       u8 l_u8Mask = 1 << (l_stIndex & 0x7);
       // Запись глобальной переменной в энергонезависимую память
       EEPROM_WriteU16(EEPROM_U16_TAG_VARIABLES + l_stIndex * 2, in_u16Variable);
