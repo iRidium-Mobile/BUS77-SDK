@@ -64,6 +64,7 @@ CIridiumBusProtocol::~CIridiumBusProtocol()
 */
 void CIridiumBusProtocol::Reset()
 {
+   // Сброс родительского класса
    CIridiumProtocol::Reset();
 
    // Очистка потоков

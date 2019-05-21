@@ -281,23 +281,27 @@ void CIridiumProtocol::ReceiveSetLIDRequest()
       // Получение нового адреса
       if(m_pInMessage->GetU8(l_u8LID))
       {
-         // Получение PIN кода
-         if(m_pInMessage->Size() >= 4)
-            m_pInMessage->GetU32LE(l_u32PIN);
-
-         // Проверка возможности изменения значения
-         s8 l_s8Result = TestPIN(IRIDIUM_OPERATION_WRITE_LID, l_u32PIN, 0);
-         if(l_s8Result > 0)
+         // Проверка HWID
+         if(TestHWID(l_pszHWID))
          {
-            // Попытка установки локального идентификатора, в случае успеха отправим подтверждение
-            if(SetLID(l_pszHWID, l_u8LID))
+            // Получение PIN кода
+            if(m_pInMessage->Size() >= 4)
+               m_pInMessage->GetU32LE(l_u32PIN);
+
+            // Проверка возможности изменения значения
+            s8 l_s8Result = TestPIN(IRIDIUM_OPERATION_WRITE_LID, l_u32PIN, 0);
+            if(l_s8Result > 0)
+            {
+               // Установки локального идентификатора
+               SetLID(l_u8LID);
                SendResponse(IRIDIUM_OK);
 
-            m_eError = IRIDIUM_OK;
-         } else
-         {
-            // Определение ошибки
-            m_eError = (l_s8Result < 0) ? IRIDIUM_PIN_LOCK : IRIDIUM_BAD_PIN;
+               m_eError = IRIDIUM_OK;
+            } else
+            {
+               // Определение ошибки
+               m_eError = (l_s8Result < 0) ? IRIDIUM_PIN_LOCK : IRIDIUM_BAD_PIN;
+            }
          }
       }
    }
@@ -1467,6 +1471,7 @@ void CIridiumProtocol::ReceiveGetChannelDescriptionRequest()
 {
    u32 l_u32ChannelID = 0;
    iridium_channel_description_t l_Desc;
+   memset(&l_Desc, 0, sizeof(iridium_channel_description_t));
 
    m_eError = IRIDIUM_PROTOCOL_CORRUPT;
    // Получение идентификатора канала управления

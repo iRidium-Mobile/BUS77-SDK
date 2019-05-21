@@ -310,8 +310,11 @@ public:
    virtual bool SendPacket(void* in_pBuffer, size_t in_stSize)
       { return false; }
 
-   // Настройка
-   virtual bool SetLID(char* in_pszHWID, u8 in_u8LID)
+   // Установка локального идентификатора
+   virtual void SetLID(u8 in_u8LID)
+      {}
+   // Проверка HWID
+   virtual bool TestHWID(const char* in_pszHWID)
       { return false; }
    // Проверка PIN кода
    virtual s8 TestPIN(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData)
@@ -324,12 +327,8 @@ public:
    virtual void ReceivedError(eIridiumError in_eError, iridium_packet_header_t* in_pPH, iridium_message_header_t* in_pMH)
       {}
 
-   // Получение информации о клиенте, который подключен к нам
-   virtual iridium_device_info_t* GetClientInfo()
-      { return NULL; }
-
    // Получен ответ на пинг
-#if defined(IRIDIUM_CONFIG_SYSTEM_SEARCH_MASTER)
+#if defined(IRIDIUM_CONFIG_SYSTEM_PING_MASTER)
    virtual void ReceivedPong()
       {}
 #endif
