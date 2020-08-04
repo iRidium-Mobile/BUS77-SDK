@@ -17,7 +17,7 @@ typedef struct device_tag_s
    u64   m_u64Min;                                 // Минимальное значение
    u64   m_u64Max;                                 // Максимальное значение
    u64   m_u64Step;                                // Шаг
-   char* m_pszDesc;                                // указатель на описание канала
+   char* m_pszDesc;                                // Указатель на описание канала
    u8    m_u8Flags;                                // Список флагов
 } device_tag_t;
 
@@ -49,21 +49,14 @@ public:
    // Перегруженные методы для взаимодействия с протколом
    //////////////////////////////////////////////////////////////////////////
    // Отправка данных
-   virtual bool SendPacket(void* in_pBuffer, size_t in_stSize);
-
-   // Блокирование/разблокирование входящего буфера (данные методы предназначены для микроконтроллеров
-   // если микроконтроллер получает данные из шины по прерываниям)
-   static u8 LockInBuffer();
-   static void UnLockInBuffer(u8 in_u8Data);
-   
-   virtual iridium_address_t GetAddress()
-      { return m_Address; }
+   virtual bool SendPacket(bool in_bBroadcast, iridium_address_t in_Address, void* in_pBuffer, size_t in_stSize);
 
    // Настройка
-   virtual bool SetLID(char* in_pszHWID, u8 in_u8LID);
-
-   // Проверка PIN кода
-   virtual s8 TestPIN(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData);
+   virtual void SetLID(u8 in_u8LID);
+   // Сравнение HWID
+   virtual bool CompareHWID(const char* in_pszHWID);
+   // Проверка возможности операции
+   virtual s8 CheckOperation(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData);
       
    // Установка/получение информации о найденом устройстве
    virtual bool GetSearchInfo(iridium_search_info_t& out_rInfo);
@@ -126,7 +119,7 @@ private:
    u8 m_aOutBuffer[IRIDIUM_BUS_OUT_BUFFER_SIZE];
 };
 
-extern "C" void iRidiumDevice_Init(void);
+extern "C" void iRidiumDevice_InitEEPROM(void);
 extern "C" void iRidiumDevice_Setup(void);
 extern "C" void iRidiumDevice_Loop(void);
 

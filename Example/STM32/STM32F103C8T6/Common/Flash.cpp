@@ -93,7 +93,7 @@ void FLASH_Read(u8* in_pBuffer, size_t in_stFlash, size_t in_stSize)
    на входе    :  in_pBuffer  - указатель на буфер куда нужно прочитать данные
                   in_stFlash  - адрес флеш памяти с чем нужно проверять данные
                   in_stSize   - размер проверяемых данных
-   на выходе	:  *
+   на выходе   :  *
 */
 bool FLASH_Test(u8* in_pBuffer, size_t in_stFlash, size_t in_stSize)
 {

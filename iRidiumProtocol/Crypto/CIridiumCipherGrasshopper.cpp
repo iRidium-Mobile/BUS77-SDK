@@ -21,7 +21,7 @@
 */
 #include "CIridiumCipherGrasshopper.h"
 #include "time.h"
-#include "Bytes.h"
+#include "IridiumBytes.h"
 
 #define ACCESS_128_VALUE_8(key, part) (key->m_au8[part])
 #define ACCESS_128_VALUE_16(key, part) (key->m_au16[part])
@@ -93,7 +93,7 @@ void plus128(block_128_bit_t* in_pDst, const block_128_bit_t* in_pSrc, const blo
 void convert128(block_128_bit_t* in_pDst, const u8* in_pArray)
 {
    for(u8 i = 0; i < MAX_BIT_PARTS; i++)
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
       ACCESS_128_VALUE_8(in_pDst, i) = pgm_read_byte(&in_pArray[ACCESS_128_VALUE_8(in_pDst, i)]);
 #else
       ACCESS_128_VALUE_8(in_pDst, i) = in_pArray[ACCESS_128_VALUE_8(in_pDst, i)];
@@ -159,7 +159,7 @@ void CIridiumCipherGrasshopper::L(block_128_bit_t* in_pBlock)
       for(s8 i = 14; i >= 0; i--)
       {
          in_pBlock->m_au8[i + 1] = in_pBlock->m_au8[i];
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
          x ^= MulGF256(in_pBlock->m_au8[i], pgm_read_byte(&g_aGrasshopperLVec[i]));
 #else
          x ^= MulGF256(in_pBlock->m_au8[i], g_aGrasshopperLVec[i]);
@@ -183,7 +183,7 @@ void CIridiumCipherGrasshopper::InverseL(block_128_bit_t* in_pBlock)
       for(u8 i = 0; i < 15; i++)
       {
          in_pBlock->m_au8[i] = in_pBlock->m_au8[i + 1];	
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
          x ^= MulGF256(in_pBlock->m_au8[i], pgm_read_byte(&g_aGrasshopperLVec[i]));
 #else
          x ^= MulGF256(in_pBlock->m_au8[i], g_aGrasshopperLVec[i]);
@@ -347,7 +347,7 @@ CIridiumCipherGrasshopper::CIridiumCipherGrasshopper() : CIridiumCipher()
             m_aLDec128[i][j].m_au8[i] = j;
             InverseL(&m_aLDec128[i][j]);
             // Таблица для декодирования инверсная
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
             m_aPILDec128[i][j].m_au8[i] = pgm_read_byte(&g_aGrasshopperPIInv[j]);
 #else
             m_aPILDec128[i][j].m_au8[i] = g_aGrasshopperPIInv[j];

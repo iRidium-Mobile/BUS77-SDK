@@ -15,6 +15,7 @@ CCANPort::CCANPort()
    memset(&m_OutBuffer, 0, sizeof(m_OutBuffer));
    memset(&m_aPacketBuffer, 0, sizeof(m_aPacketBuffer));
    m_stPacketSize = 0;
+   m_bTransmite = false;
 }
 
 /**
@@ -40,7 +41,7 @@ bool CCANPort::SetInBuffer(void* in_pBuffer, size_t in_stSize)
       m_InBuffer.m_stMax = in_stSize / sizeof(can_frame_t);
       m_InBuffer.m_pBuffer = (can_frame_t*)in_pBuffer;
       // Очистка буфера
-      Clear(m_InBuffer);
+      memset(in_pBuffer, 0, in_stSize);
       l_bResult = true;
    }
    return l_bResult;
@@ -62,22 +63,10 @@ bool CCANPort::SetOutBuffer(void* in_pBuffer, size_t in_stSize)
       m_OutBuffer.m_stMax = in_stSize / sizeof(can_frame_t);
       m_OutBuffer.m_pBuffer = (can_frame_t*)in_pBuffer;
       // Очистка буфера
-      Clear(m_OutBuffer);
+      memset(in_pBuffer, 0, in_stSize);
       l_bResult = true;
    }
    return l_bResult;
-}
-
-/**
-   Очистка буфера
-   на входе    :  in_rBuffer  - ссылка на буфер с данными
-   на выходе   :  *
-*/
-void CCANPort::Clear(can_buffer_t& in_rBuffer)
-{
-   in_rBuffer.m_stCount = 0;
-   if(in_rBuffer.m_pBuffer && in_rBuffer.m_stMax)
-      memset(in_rBuffer.m_pBuffer, 0, sizeof(can_frame_t) * in_rBuffer.m_stMax);
 }
 
 /**
@@ -96,9 +85,6 @@ bool CCANPort::AddFrame(can_frame_t* in_pFrame)
       memcpy(m_InBuffer.m_pBuffer + m_InBuffer.m_stCount, in_pFrame, sizeof(can_frame_t));
       m_InBuffer.m_stCount++;
       l_bResult = true;
-   } else
-   {
-      l_bResult = false;
    }
    return l_bResult;
 }
@@ -125,11 +111,13 @@ bool CCANPort::AddPacket(bool in_bBroadcast, u8 in_u8Address, void* in_pBuffer, 
    if((m_OutBuffer.m_stMax - m_OutBuffer.m_stCount) >= l_u8Frames)
    {
       // Вычисление указателя на первый фрейм
-      can_frame_t* l_pFrame = m_OutBuffer.m_pBuffer + m_OutBuffer.m_stCount;
+      size_t l_stIndex = (m_OutBuffer.m_stStart + m_OutBuffer.m_stCount) % m_OutBuffer.m_stMax;
       u8 l_u8TID = GetTID();
       // Разбивка на буфера на фреймы
       for(u8 i = 0; i < l_u8Frames; i++)
       {
+         can_frame_t* l_pFrame = m_OutBuffer.m_pBuffer + l_stIndex;
+
          // Заполнение полей структуры
          l_pFrame->m_u32ExtID =  ((m_u16CANID & IRIDIUM_EXT_ID_CAN_ID_MASK) << IRIDIUM_EXT_ID_CAN_ID_SHIFT) |
                                  ((l_u8TID & IRIDIUM_EXT_ID_TID_MASK) << IRIDIUM_EXT_ID_TID_SHIFT) |
@@ -142,7 +130,8 @@ bool CCANPort::AddPacket(bool in_bBroadcast, u8 in_u8Address, void* in_pBuffer, 
          // Уменьшение размера
          l_stSize -= l_pFrame->m_u8Size;
          l_pPtr += l_pFrame->m_u8Size;
-         l_pFrame++;
+
+         l_stIndex = (l_stIndex + 1) % m_OutBuffer.m_stMax;
       }
       // Увеличение количества фреймов
       m_OutBuffer.m_stCount += l_u8Frames;
@@ -243,7 +232,7 @@ can_frame_t* CCANPort::GetFrame()
 
    // Проверка наличия фреймов для отправки
    if(m_OutBuffer.m_stCount)
-      l_pResult = m_OutBuffer.m_pBuffer;
+      l_pResult = m_OutBuffer.m_pBuffer + m_OutBuffer.m_stStart;
 
    return l_pResult;
 }
@@ -258,10 +247,8 @@ void CCANPort::DeleteFrame()
    // Проверка наличия фреймов
    if(m_OutBuffer.m_stCount)
    {
+      m_OutBuffer.m_stStart = (m_OutBuffer.m_stStart + 1) % m_OutBuffer.m_stMax;
       m_OutBuffer.m_stCount--;
-      // Если в буфере остались данные, сдвинем данные влево
-      if(m_OutBuffer.m_stCount)
-         memmove((u8*)m_OutBuffer.m_pBuffer, (u8*)(m_OutBuffer.m_pBuffer + 1), m_OutBuffer.m_stCount * sizeof(can_frame_t));
    }
 }
 

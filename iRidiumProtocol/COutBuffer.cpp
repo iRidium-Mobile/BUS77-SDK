@@ -14,9 +14,9 @@
  *    Марат Гилязетдинов, Сергей Королёв  - первая версия
  *******************************************************************************/
 #include "COutBuffer.h"
-#include "Bytes.h"
+#include "IridiumBytes.h"
 
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 #include <avr/pgmspace.h>
 #endif
 
@@ -28,12 +28,9 @@
 */
 COutBuffer::COutBuffer()
 {
-   m_pBuffer      = NULL;
-   m_pEnd         = NULL;
-   m_pPtr         = NULL;
-   m_pAnchorU8    = NULL;
-   m_pAnchorU16   = NULL;
-   m_pAnchorU32   = NULL;
+   m_pBuffer   = NULL;
+   m_pEnd      = NULL;
+   m_pPtr      = NULL;
 }
 
 /**
@@ -58,86 +55,46 @@ void COutBuffer::SetBuffer(void* in_pBuffer, size_t in_stSize)
 }
 
 /**
-   Резервирование 8 битного значения
-   на входе    :  *
-   на выходе   :  успешность резервирования
+   Резервирование указаного количества байт
+   на входе    :  in_stSize   - размер зарезервированной области
+   на выходе   :  указатель на зарезервированную область, если NULL произошла ошибка
 */
-bool COutBuffer::CreateAnchorU8()
+u8* COutBuffer::CreateAnchor(size_t in_stSize)
 {
-   bool l_bResult = AddU8(0);
-   if(l_bResult)
-      m_pAnchorU8 = m_pPtr - 1;
-   return l_bResult;
+   u8* l_pResult = NULL;
+   if((m_pPtr + in_stSize) <= m_pEnd)
+   {
+      l_pResult = m_pPtr;
+      m_pPtr += in_stSize;
+   } else
+      SetError();
+   return l_pResult;
 }
 
 /**
-   Резервирование 16 битного значения
-   на входе    :  *
-   на выходе   :  успешность резервирования
-*/
-bool COutBuffer::CreateAnchorU16()
-{
-   bool l_bResult = AddU16LE(0);
-   if(l_bResult)
-      m_pAnchorU16 = m_pPtr - 2;
-   return l_bResult;
-}
-
-/**
-   Резервирование 32 битного значения
-   на входе    :  *
-   на выходе   :  успешность резервирования
-*/
-bool COutBuffer::CreateAnchorU32()
-{
-   bool l_bResult = AddU32LE(0);
-   if(l_bResult)
-      m_pAnchorU32 = m_pPtr - 4;
-   return l_bResult;
-}
-
-/**
-   Заполнение зарезервированного 8 битного значения
-   на входе    :  in_u8Value  - значение
+   Заполнение зарезервированной области значением в LE последовательности
+   на входе    :  in_pAnchor  - указатель на зарезервированную область
+                  in_pValue   - указатель на значение
+                  in_stSize   - размер записываемой области
    на выходе   :  *
 */
-void COutBuffer::SetAnchorU8Value(u8 in_u8Value)
+void COutBuffer::SetAnchorLE(u8* in_pAnchor, void* in_pValue, size_t in_stSize)
 {
-   if(m_pAnchorU8)
-      WriteU8(m_pAnchorU8, in_u8Value);
+   if(in_pAnchor)
+      WriteLE(in_pAnchor, in_pValue, in_stSize);
 }
 
 /**
-   Заполнение зарезервированного 16 битного значения
-   на входе    :  in_u16Value - значение для записи
+   Заполнение зарезервированной области значением в BE последовательности
+   на входе    :  in_pAnchor  - указатель на зарезервированную область
+                  in_pValue   - указатель на значение
+                  in_stSize   - размер записываемой области
    на выходе   :  *
 */
-void COutBuffer::SetAnchorU16BEValue(u16 in_u16Value)
+void COutBuffer::SetAnchorBE(u8* in_pAnchor, void* in_pValue, size_t in_stSize)
 {
-   if(m_pAnchorU16)
-      WriteU16BE(m_pAnchorU16, in_u16Value);
-}
-
-/**
-   Заполнение зарезервированного 16 битного значения
-   на входе    :  in_u16Value - значение для записи
-   на выходе   :  *
-*/
-void COutBuffer::SetAnchorU16LEValue(u16 in_u16Value)
-{
-   if(m_pAnchorU16)
-      WriteU16LE(m_pAnchorU16, in_u16Value);
-}
-
-/**
-   Заполнение зарезервированного 32 битного значения
-   на входе    :  in_u32Value - значение для записи
-   на выходе   :  *
-*/
-void COutBuffer::SetAnchorU32LEValue(u32 in_u32Value)
-{
-   if(m_pAnchorU32)
-      WriteU32LE(m_pAnchorU32, in_u32Value);
+   if(in_pAnchor)
+      WriteBE(in_pAnchor, in_pValue, in_stSize);
 }
 
 /**
@@ -145,15 +102,12 @@ void COutBuffer::SetAnchorU32LEValue(u32 in_u32Value)
    на входе    :  in_u8Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddU8(u8 in_u8Value)
+void COutBuffer::AddU8(u8 in_u8Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 1) <= m_pEnd)
-   {
-      m_pPtr = WriteU8(m_pPtr, in_u8Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteByte(m_pPtr, in_u8Value);
+   else
+      SetError();
 }
 
 /**
@@ -161,15 +115,12 @@ bool COutBuffer::AddU8(u8 in_u8Value)
    на входе    :  in_s8Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddS8(s8 in_s8Value)
+void COutBuffer::AddS8(s8 in_s8Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 1) <= m_pEnd)
-   {
-      m_pPtr = WriteS8(m_pPtr, in_s8Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteByte(m_pPtr, in_s8Value);
+   else
+      SetError();
 }
 
 /**
@@ -177,15 +128,12 @@ bool COutBuffer::AddS8(s8 in_s8Value)
    на входе    :  in_u16Value - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddU16LE(u16 in_u16Value)
+void COutBuffer::AddU16LE(u16 in_u16Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 2) <= m_pEnd)
-   {
-      m_pPtr = WriteU16LE(m_pPtr, in_u16Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_u16Value, 2);
+   else
+      SetError();
 }
 
 /**
@@ -193,15 +141,12 @@ bool COutBuffer::AddU16LE(u16 in_u16Value)
    на входе    :  in_u16Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddU16BE(u16 in_u16Value)
+void COutBuffer::AddU16BE(u16 in_u16Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 2) <= m_pEnd)
-   {
-      m_pPtr = WriteU16BE(m_pPtr, in_u16Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_u16Value, 2);
+   else
+      SetError();
 }
 
 /**
@@ -209,15 +154,12 @@ bool COutBuffer::AddU16BE(u16 in_u16Value)
    на входе    :  in_s16Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddS16LE(s16 in_s16Value)
+void COutBuffer::AddS16LE(s16 in_s16Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 2) <= m_pEnd)
-   {
-      m_pPtr = WriteS16LE(m_pPtr, in_s16Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_s16Value, 2);
+   else
+      SetError();
 }
 
 /**
@@ -225,15 +167,12 @@ bool COutBuffer::AddS16LE(s16 in_s16Value)
    на входе    :  in_s16Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddS16BE(s16 in_s16Value)
+void COutBuffer::AddS16BE(s16 in_s16Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 2) <= m_pEnd)
-   {
-      m_pPtr = WriteS16BE(m_pPtr, in_s16Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_s16Value, 2);
+   else
+      SetError();
 }
 
 /**
@@ -241,15 +180,12 @@ bool COutBuffer::AddS16BE(s16 in_s16Value)
    на входе    :  in_u32Value - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddU32LE(u32 in_u32Value)
+void COutBuffer::AddU32LE(u32 in_u32Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 4) <= m_pEnd)
-   {
-      m_pPtr = WriteU32LE(m_pPtr, in_u32Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_u32Value, 4);
+   else
+      SetError();
 }
 
 /**
@@ -257,15 +193,12 @@ bool COutBuffer::AddU32LE(u32 in_u32Value)
    на входе    :  in_u32Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddU32BE(u32 in_u32Value)
+void COutBuffer::AddU32BE(u32 in_u32Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 4) <= m_pEnd)
-   {
-      m_pPtr = WriteU32BE(m_pPtr, in_u32Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_u32Value, 4);
+   else
+      SetError();
 }
 
 /**
@@ -273,15 +206,12 @@ bool COutBuffer::AddU32BE(u32 in_u32Value)
    на входе    :  in_s32Value - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddS32LE(s32 in_s32Value)
+void COutBuffer::AddS32LE(s32 in_s32Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 4) <= m_pEnd)
-   {
-      m_pPtr = WriteS32LE(m_pPtr, in_s32Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_s32Value, 4);
+   else
+      SetError();
 }
 
 /**
@@ -289,15 +219,12 @@ bool COutBuffer::AddS32LE(s32 in_s32Value)
    на входе    :  in_s32Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddS32BE(s32 in_s32Value)
+void COutBuffer::AddS32BE(s32 in_s32Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 4) <= m_pEnd)
-   {
-      m_pPtr = WriteS32BE(m_pPtr, in_s32Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_s32Value, 4);
+   else
+      SetError();
 }
 
 /**
@@ -305,15 +232,12 @@ bool COutBuffer::AddS32BE(s32 in_s32Value)
    на входе    :  in_f32Value - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddF32LE(f32 in_f32Value)
+void COutBuffer::AddF32LE(f32 in_f32Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 4) <= m_pEnd)
-   {
-      m_pPtr = WriteF32LE(m_pPtr, in_f32Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_f32Value, 4);
+   else
+      SetError();
 }
 
 /**
@@ -321,15 +245,12 @@ bool COutBuffer::AddF32LE(f32 in_f32Value)
    на входе    :  in_f32Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddF32BE(f32 in_f32Value)
+void COutBuffer::AddF32BE(f32 in_f32Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 4) <= m_pEnd)
-   {
-      m_pPtr = WriteF32BE(m_pPtr, in_f32Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_f32Value, 4);
+   else
+      SetError();
 }
 
 /**
@@ -337,15 +258,12 @@ bool COutBuffer::AddF32BE(f32 in_f32Value)
    на входе    :  in_u64Value - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddU64LE(u64 in_u64Value)
+void COutBuffer::AddU64LE(u64 in_u64Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 8) <= m_pEnd)
-   {
-      m_pPtr = WriteU64LE(m_pPtr, in_u64Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_u64Value, 8);
+   else
+      SetError();
 }
 
 /**
@@ -353,15 +271,12 @@ bool COutBuffer::AddU64LE(u64 in_u64Value)
    на входе    :  in_u64Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddU64BE(u64 in_u64Value)
+void COutBuffer::AddU64BE(u64 in_u64Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 8) <= m_pEnd)
-   {
-      m_pPtr = WriteU64BE(m_pPtr, in_u64Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_u64Value, 8);
+   else
+      SetError();
 }
 
 /**
@@ -369,15 +284,12 @@ bool COutBuffer::AddU64BE(u64 in_u64Value)
    на входе    :  in_s64Value - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddS64LE(s64 in_s64Value)
+void COutBuffer::AddS64LE(s64 in_s64Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 8) <= m_pEnd)
-   {
-      m_pPtr = WriteS64LE(m_pPtr, in_s64Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_s64Value, 8);
+   else
+      SetError();
 }
 
 /**
@@ -385,15 +297,12 @@ bool COutBuffer::AddS64LE(s64 in_s64Value)
    на входе    :  in_s64Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddS64BE(s64 in_s64Value)
+void COutBuffer::AddS64BE(s64 in_s64Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 8) <= m_pEnd)
-   {
-      m_pPtr = WriteS64BE(m_pPtr, in_s64Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_s64Value, 8);
+   else
+      SetError();
 }
 
 /**
@@ -401,15 +310,12 @@ bool COutBuffer::AddS64BE(s64 in_s64Value)
    на входе    :  in_f64Value - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddF64LE(f64 in_f64Value)
+void COutBuffer::AddF64LE(f64 in_f64Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 8) <= m_pEnd)
-   {
-      m_pPtr = WriteF64LE(m_pPtr, in_f64Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteLE(m_pPtr, &in_f64Value, 8);
+   else
+      SetError();
 }
 
 /**
@@ -417,15 +323,12 @@ bool COutBuffer::AddF64LE(f64 in_f64Value)
    на входе    :  in_f64Value  - значение для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddF64BE(f64 in_f64Value)
+void COutBuffer::AddF64BE(f64 in_f64Value)
 {
-   bool l_bResult = false;
    if((m_pPtr + 8) <= m_pEnd)
-   {
-      m_pPtr = WriteF64BE(m_pPtr, in_f64Value);
-      l_bResult = true;
-   }
-   return l_bResult;
+      m_pPtr = WriteBE(m_pPtr, &in_f64Value, 8);
+   else
+      SetError();
 }
 
 /**
@@ -434,26 +337,16 @@ bool COutBuffer::AddF64BE(f64 in_f64Value)
    на выходе   :  успешность добавления в буфер
    примечание  :  вместе со стрингом добавляется конец строки - 0
 */
-bool COutBuffer::AddString(const char* in_pszStr)
+void COutBuffer::AddString(const char* in_pszStr)
 {
-   bool l_bResult = false;
-   // Вычисление длинны строки
-   size_t l_stSize = in_pszStr ? strlen(in_pszStr) + 1 : 0;
-   if(l_stSize)
-   {
-      if((m_pPtr + l_stSize) <= m_pEnd)
-      {
-         memcpy(m_pPtr, in_pszStr, l_stSize);
-         m_pPtr += l_stSize;
-         l_bResult = true;
-      }
-   } else
-      l_bResult = AddU8(0);
-   
-   return l_bResult;
+   // Добавление строки
+   if(in_pszStr)
+      AddData(in_pszStr, strlen(in_pszStr));
+   // Добавление конца строки
+   AddU8(0);
 }
 
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 
 /**
    Добавление стринга в пакет из Flash памяти
@@ -461,87 +354,33 @@ bool COutBuffer::AddString(const char* in_pszStr)
    на выходе   :  успешность добавления в буфер
    примечание  :  вместе со стрингом добавляется конец строки - 0
 */
-bool COutBuffer::AddStringFromFlash(const char* in_pszStr)
+void COutBuffer::AddStringFromFlash(const char* in_pszStr)
 {
-   bool l_bResult = false;
    // Вычисление длинны строки
-   size_t l_stSize = in_pszStr ? strlen_P(in_pszStr) + 1 : 0;
+   size_t l_stSize = in_pszStr ? strlen_P(in_pszStr) : 0;
    if(l_stSize)
    {
       if((m_pPtr + l_stSize) <= m_pEnd)
       {
          memcpy_P(m_pPtr, in_pszStr, l_stSize);
          m_pPtr += l_stSize;
-         l_bResult = true;
-      }
-   } else
-      l_bResult = AddU8(0);
-   return l_bResult;
+      } else
+         SetError();
+   }
+   AddU8(0);
 }
 #endif
-
-/**
-   Добавить стринг без добавления в конце 0, с добавлением в начале размера данных в виде U16
-   на входе    :  in_pszStr   - указатель на стринг
-   на выходе   :  *
-*/
-bool COutBuffer::AddStringWithU16Size(const char* in_pszStr)
-{
-   bool l_bResult = false;
-
-   // Получение размера данных
-   u16 l_u16Size = (in_pszStr && in_pszStr[0]) ? (u16)strlen(in_pszStr) + 1 : 0;
-   // Проверим, поместится ли строка в исходящий буфер
-   if((l_u16Size + 2) > Free())
-      l_u16Size = 0;
-
-   // Добавление длинны строки
-   l_bResult = AddU16LE(l_u16Size);
-
-   // Добавление данных
-   if(l_bResult && l_u16Size)
-      AddData(in_pszStr, l_u16Size);
-
-   return l_bResult;
-}
-
-/**
-   Добавление стринга без добавления в конце 0, с добавлением в начале размера данных (1 байт)
-   на входе    :  in_pszStr   - указатель на стринг
-   на выходе   :  *
-*/
-bool COutBuffer::AddStringWithU8Size(const char* in_pszStr)
-{
-   bool l_bResult = false;
-
-   // Получение размера данных
-   u8 l_u8Size = (in_pszStr && in_pszStr[0]) ? (u8)strlen(in_pszStr) : 0;
-   // Проверим, поместится ли строка в исходящий буфер
-   if((size_t)(l_u8Size + 1) > Free())
-      l_u8Size = 0;
-
-   // Добавление размера данных
-   l_bResult = AddU8(l_u8Size);
-
-   // Добавление данных
-   if(l_bResult && l_u8Size)
-      l_bResult = AddData(in_pszStr, l_u8Size);
-
-   return l_bResult;
-}
 
 /**
    Добавление стринга в пакет без добавления конца строки
    на входе    :  in_pszStr   - указатель на стринг
    на выходе   :  *
 */
-bool COutBuffer::AddStringEndless(const char* in_pszStr)
+void COutBuffer::AddStringEndless(const char* in_pszStr)
 {
-   bool l_bResult = true;
    // Проверка наличия данных
-   if(in_pszStr && in_pszStr[0])
-      l_bResult = AddData(in_pszStr, strlen(in_pszStr));
-   return l_bResult;
+   if(in_pszStr)
+      AddData(in_pszStr, strlen(in_pszStr));
 }
 
 /**
@@ -550,20 +389,19 @@ bool COutBuffer::AddStringEndless(const char* in_pszStr)
                   in_stSize   - количество байт для записи
    на выходе   :  успешность добавления в буфер
 */
-bool COutBuffer::AddData(const void* in_pData, size_t in_stSize)
+void COutBuffer::AddData(const void* in_pData, size_t in_stSize)
 {
-   bool l_bResult = false;
    // Проверка на наличие данных
    if(in_pData && in_stSize)
    {
+      // Проверка возможности добавления данных
       if((m_pPtr + in_stSize) <= m_pEnd)
       {
          memcpy(m_pPtr, in_pData, in_stSize);
          m_pPtr += in_stSize;
-         l_bResult = true;
-      }
+      } else
+         SetError();
    }
-   return l_bResult;
 }
 
 /**
@@ -573,7 +411,6 @@ bool COutBuffer::AddData(const void* in_pData, size_t in_stSize)
 */
 bool COutBuffer::AddTime(iridium_time_t& in_rTime)
 {
-   bool l_bResult = false;
    u32 l_u32Data = 0;
    // Проверка наличия данных
    if(in_rTime.m_u8Flags)
@@ -591,7 +428,7 @@ bool COutBuffer::AddTime(iridium_time_t& in_rTime)
          // Добавление флагов 2 бита
          l_u32Data |= (u32)in_rTime.m_u8Flags & 0x3;
          // Добавление данных даты в поток
-         l_bResult = AddU32LE(l_u32Data);
+         AddU32LE(l_u32Data);
       }
       // Проверка наличия данных времени
       if(in_rTime.m_u8Flags & IRIDIUM_TIME_FLAG_TIME)
@@ -610,10 +447,10 @@ bool COutBuffer::AddTime(iridium_time_t& in_rTime)
          // Добавление флагов 2 бита
          l_u32Data |= (u32)in_rTime.m_u8Flags & 0x3;
          // Добавление данных времени в поток
-         l_bResult = AddU32LE(l_u32Data);
+         AddU32LE(l_u32Data);
       } 
    }
-   return l_bResult;
+   return Result();
 }
 
 /**
@@ -628,7 +465,6 @@ bool COutBuffer::AddTime(iridium_time_t& in_rTime)
 */
 bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& out_stRemain, size_t in_stReserve)
 {
-   bool l_bResult = false;
    bool l_bFlag = false;
 
    // Если значение строка или массив, а значение есть, инициализируем остаток
@@ -641,8 +477,8 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
       out_stRemain = 0;
 
    // Резервируем место для типа
-   l_bResult = CreateAnchorU8();
-   if(l_bResult)
+   u8* l_pAnchor = CreateAnchor(1);
+   if(l_pAnchor)
    {
       // Обработка типа
       switch(in_u8Type)
@@ -656,70 +492,70 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
          if(in_rValue.m_s8Value)
          {
             l_bFlag = true;
-            l_bResult = AddS8(in_rValue.m_s8Value);
+            AddS8(in_rValue.m_s8Value);
          }
          break;
       case IVT_U8:
          if(in_rValue.m_u8Value)
          {
             l_bFlag = true;
-            l_bResult = AddU8(in_rValue.m_u8Value);
+            AddU8(in_rValue.m_u8Value);
          }
          break;
       case IVT_S16:
          if(in_rValue.m_s16Value)
          {
             l_bFlag = true;
-            l_bResult = AddS16LE(in_rValue.m_s16Value);
+            AddS16LE(in_rValue.m_s16Value);
          }
          break;
       case IVT_U16:
          if(in_rValue.m_u16Value)
          {
             l_bFlag = true;
-            l_bResult = AddU16LE(in_rValue.m_u16Value);
+            AddU16LE(in_rValue.m_u16Value);
          }
          break;
       case IVT_S32:
          if(in_rValue.m_s32Value)
          {
             l_bFlag = true;
-            l_bResult = AddS32LE(in_rValue.m_s32Value);
+            AddS32LE(in_rValue.m_s32Value);
          }
          break;
       case IVT_U32:
          if(in_rValue.m_u32Value)
          {
             l_bFlag = true;
-            l_bResult = AddU32LE(in_rValue.m_u32Value);
+            AddU32LE(in_rValue.m_u32Value);
          }
          break;
       case IVT_F32:
          if(in_rValue.m_f32Value != 0.0f)
          {
             l_bFlag = true;
-            l_bResult = AddF32LE(in_rValue.m_f32Value);
+            AddF32LE(in_rValue.m_f32Value);
          }
          break;
       case IVT_S64:
          if(in_rValue.m_s64Value)
          {
             l_bFlag = true;
-            l_bResult = AddS64LE(in_rValue.m_s64Value);
+            AddS64LE(in_rValue.m_s64Value);
          }
          break;
       case IVT_U64:
          if(in_rValue.m_u64Value)
          {
             l_bFlag = true;
-            l_bResult = AddU64LE(in_rValue.m_u64Value);
+            AddU64LE(in_rValue.m_u64Value);
          }
          break;
       case IVT_F64:
          if(in_rValue.m_f64Value != 0.0)
          {
             l_bFlag = true;
-            l_bResult = AddF64LE(in_rValue.m_f64Value);
+            AddF64LE(in_rValue.m_f64Value);
          }
          break;
       case IVT_STRING8:
@@ -740,7 +576,7 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
                // Добавление размера строки плюс 0 в конце
                AddU16LE(l_stSize + 1);
                // Добавление данных
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
                if(in_rValue.m_Array.m_bMem)
                   memcpy_P(m_pPtr, (const char*)in_rValue.m_Array.m_pPtr + l_stPos, l_stSize);
                else
@@ -756,7 +592,8 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
                // Отметим наличие данных
                l_bFlag = true;
             } else
-               l_bResult = false;
+               SetError();
+               //l_bResult = false;
          }
          break;
       case IVT_TIME:
@@ -764,7 +601,7 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
          if(in_rValue.m_Time.m_u8Flags)
          {
             l_bFlag = true;
-            l_bResult = AddTime(in_rValue.m_Time);
+            AddTime(in_rValue.m_Time);
          // Если даты или времени нет
          } else
             l_bFlag = false;
@@ -787,7 +624,7 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
                // Добавление размера строки
                AddU16LE(l_stSize);
                // Добавление данных
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
                if(in_rValue.m_Array.m_bMem)
                   memcpy_P(m_pPtr, (const char*)in_rValue.m_Array.m_pPtr + l_stPos, l_stSize);
                else
@@ -801,17 +638,21 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
                // Отметим наличие данных
                l_bFlag = true;
             } else
-               l_bResult = false;
+               SetError();
          }
          break;
       default:
+         SetError();
          break;
       }
       // Запишем значение типа
-      if(l_bResult)
-         SetAnchorU8Value(in_u8Type | l_bFlag << 7);
+      if(Result())
+      {
+         in_u8Type |= l_bFlag << 7;
+         SetAnchorLE(l_pAnchor, &in_u8Type, 1);
+      }
    }
-   return l_bResult;
+   return Result();
 }
 
 /**

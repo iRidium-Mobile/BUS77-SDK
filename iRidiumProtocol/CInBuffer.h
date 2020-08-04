@@ -16,7 +16,6 @@
 #ifndef _C_IN_BUFFER_H_INCLUDED_
 #define _C_IN_BUFFER_H_INCLUDED_
 
-#include "IridiumConfig.h"
 #include "IridiumTypes.h"
 #include "IridiumValue.h"
 
@@ -28,7 +27,7 @@ public:
    virtual ~CInBuffer();
 
    // Методы
-   virtual void SetBuffer(const void* in_pBuffer, size_t in_stSize);
+   void SetBuffer(const void* in_pBuffer, size_t in_stSize);
    void* GetBuffer()
       { return m_pBuffer; }
    u8* GetDataPtr()                                // Получение текущего указателя на данные
@@ -47,6 +46,7 @@ public:
    size_t Used()                                   // Получение занятого пространства
       { return m_pWritePtr - m_pBuffer; }
 
+   void Reset();                                   // Сброс параметров буфера
    virtual void Clear();                           // Очистка с обнулением данных
    void Skip(size_t in_stSize);                    // Пропустить указаное количество байт
    void Shift();                                   // Сдвиг буфера

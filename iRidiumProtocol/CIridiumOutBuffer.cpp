@@ -61,22 +61,17 @@ void CIridiumOutBuffer::SetBuffer(size_t in_stHeaderSize, size_t in_stCRCSize, v
    на входе    :  in_rMH   - ссылка на данные заголовка контейнера
    на выходе   :  успешность добавления данных
 */
-bool CIridiumOutBuffer::AddMessageHeader(iridium_message_header_t& in_rMH)
+void CIridiumOutBuffer::AddMessageHeader(iridium_message_header_t& in_rMH)
 {
-   bool l_bResult = false;
    // Запись направления, признака ошибки и версии контейнера
-   l_bResult = AddU8(in_rMH.m_Flags.m_bDirection << 7 | in_rMH.m_Flags.m_bError << 6 | in_rMH.m_Flags.m_bNoTID << 5 | in_rMH.m_Flags.m_bEnd << 4 | in_rMH.m_Flags.m_u4Version);
-   if(l_bResult)
+   AddU8(in_rMH.m_Flags.m_bDirection << 7 | in_rMH.m_Flags.m_bError << 6 | in_rMH.m_Flags.m_bNoTID << 5 | in_rMH.m_Flags.m_bEnd << 4 | in_rMH.m_Flags.m_u4Version);
+   // Запись типа
+   AddU8(in_rMH.m_u8Type);
+   if(!in_rMH.m_Flags.m_bNoTID)
    {
-      // Запись типа
-      l_bResult = AddU8(in_rMH.m_u8Type);
-      if(l_bResult && !in_rMH.m_Flags.m_bNoTID)
-      {
-         // Запись идентификатора транзакции
-         l_bResult = AddU16LE(in_rMH.m_u16TID);
-      }
+      // Запись идентификатора транзакции
+      AddU16LE(in_rMH.m_u16TID);
    }
-   return l_bResult;
 }
 
 /**
@@ -84,27 +79,21 @@ bool CIridiumOutBuffer::AddMessageHeader(iridium_message_header_t& in_rMH)
    на входе    :  in_rInfo - ссылка на данные устройства
    на выходе   :  успешность добавления данных
 */
-bool CIridiumOutBuffer::AddSearchInfo(iridium_search_info_t& in_rInfo)
+void CIridiumOutBuffer::AddSearchInfo(iridium_search_info_t& in_rInfo)
 {
-   bool l_bResult = false;
-
    // Добавление группы клиента
-   l_bResult = AddU8(in_rInfo.m_u8Group);
-   if(l_bResult)
-   {
-#if defined(IRIDIUM_AVR_PLATFORM)
-      // Добавление HWID
-      if(in_rInfo.Mem.m_bHWID)
-         l_bResult = AddStringFromFlash(in_rInfo.m_pszHWID);
-      else
-         l_bResult = AddString(in_rInfo.m_pszHWID);
+   AddU8(in_rInfo.m_u8Group);
+
+#if defined(IRIDIUM_MCU_AVR)
+   // Добавление HWID
+   if(in_rInfo.Mem.m_bHWID)
+      AddStringFromFlash(in_rInfo.m_pszHWID);
+   else
+      AddString(in_rInfo.m_pszHWID);
 #else
-      // Добавление HWID
-      l_bResult = AddString(in_rInfo.m_pszHWID);
+   // Добавление HWID
+   AddString(in_rInfo.m_pszHWID);
 #endif
-   }
-
-   return l_bResult;
 }
 
 /**
@@ -112,73 +101,53 @@ bool CIridiumOutBuffer::AddSearchInfo(iridium_search_info_t& in_rInfo)
    на входе    :  in_rInfo - ссылка на данные устройства
    на выходе   :  успешность добавления данных
 */
-bool CIridiumOutBuffer::AddDeviceInfo(iridium_device_info_t& in_rInfo)
+void CIridiumOutBuffer::AddDeviceInfo(iridium_device_info_t& in_rInfo)
 {
-   bool l_bResult = false;
-
    // Добавление группы клиента
-   l_bResult = AddU8(in_rInfo.m_u8Group);
+   AddU8(in_rInfo.m_u8Group);
 
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
    // Добавление имени устройства
-   if(l_bResult)
-   {
-      if(in_rInfo.Mem.m_bName)
-         l_bResult = AddStringFromFlash(in_rInfo.m_pszName);
-      else
-         l_bResult = AddString(in_rInfo.m_pszName);
-   }
+   if(in_rInfo.Mem.m_bName)
+      AddStringFromFlash(in_rInfo.m_pszName);
+   else
+      AddString(in_rInfo.m_pszName);
    // Добавление операционной системы
-   if(l_bResult)
-   {
-      if(in_rInfo.Mem.m_bOS)
-         l_bResult = AddStringFromFlash(in_rInfo.m_pszProducer);
-      else
-         l_bResult = AddString(in_rInfo.m_pszProducer);
-   }
+   if(in_rInfo.Mem.m_bOS)
+      AddStringFromFlash(in_rInfo.m_pszProducer);
+   else
+      AddString(in_rInfo.m_pszProducer);
    // Добавление модели устройства
-   if(l_bResult)
-   {
-      if(in_rInfo.Mem.m_bModel)
-         l_bResult = AddStringFromFlash(in_rInfo.m_pszModel);
-      else
-         l_bResult = AddString(in_rInfo.m_pszModel);
-   }
+   if(in_rInfo.Mem.m_bModel)
+      AddStringFromFlash(in_rInfo.m_pszModel);
+   else
+      AddString(in_rInfo.m_pszModel);
    // Добавление HWID
-   if(l_bResult)
-   {
-      if(in_rInfo.Mem.m_bHWID)
-         l_bResult = AddStringFromFlash(in_rInfo.m_pszHWID);
-      else
-         l_bResult = AddString(in_rInfo.m_pszHWID);
-   }
+   if(in_rInfo.Mem.m_bHWID)
+      AddStringFromFlash(in_rInfo.m_pszHWID);
+   else
+      AddString(in_rInfo.m_pszHWID);
 #else
    // Добавление имени устройства
-   if(l_bResult)
-      l_bResult = AddString(in_rInfo.m_pszName);
+   AddString(in_rInfo.m_pszName);
    // Добавление операционной системы
-   if(l_bResult)
-      l_bResult = AddString(in_rInfo.m_pszProducer);
+   AddString(in_rInfo.m_pszProducer);
    // Добавление модели устройства
-   if(l_bResult)
-      l_bResult = AddString(in_rInfo.m_pszModel);
+   AddString(in_rInfo.m_pszModel);
    // Добавление HWID
-   if(l_bResult)
-      l_bResult = AddString(in_rInfo.m_pszHWID);
+   AddString(in_rInfo.m_pszHWID);
 #endif
 
    // Тип операционной системы и версия
-   if(l_bResult)
-      l_bResult = AddU32LE(in_rInfo.m_u32DeviceFlags);
-   if(l_bResult)
-      l_bResult = AddU32LE(in_rInfo.m_u32Version);
+   AddU8(in_rInfo.m_u8Class);
+   AddU8(in_rInfo.m_u8Processor);
+   AddU8(in_rInfo.m_u8OS);
+   AddU8(in_rInfo.m_u8Flags);
+   AddU8(in_rInfo.m_u8FirmwareID);
+   AddData(in_rInfo.m_aVersion, 3);
    // Добавление количества каналов управления и обратной связи
-   if(l_bResult)
-      l_bResult = AddU32LE(in_rInfo.m_u32Channels);
-   if(l_bResult)
-      l_bResult = AddU32LE(in_rInfo.m_u32Tags);
-
-   return l_bResult;
+   AddU32LE(in_rInfo.m_u32Channels);
+   AddU32LE(in_rInfo.m_u32Tags);
 }
 
 /**
@@ -186,29 +155,26 @@ bool CIridiumOutBuffer::AddDeviceInfo(iridium_device_info_t& in_rInfo)
    на входе    :  in_rDesc - ссылка на общее описание канала
    на выходе   :  успешность
 */
-bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
+void CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
 {
-   bool l_bResult = false;
    u8 l_u8Type = 0;
    u8 l_u8Flag = 0;
 
    // Получение типа значения
    l_u8Type = in_rDesc.m_u8Type;
-   l_bResult = CreateAnchorU8();
-   if(l_bResult)
+   u8* l_pAnchor = CreateAnchor(1);
+   if(l_pAnchor)
    {
       switch(l_u8Type)
       {
       // Неопределенный тип
       case IVT_NONE:
-         l_bResult = true;
          break;
       // Запись бинарных параметров
       case IVT_BOOL:
          l_u8Flag |= (in_rDesc.m_Min.m_bValue << 7);
          l_u8Flag |= (in_rDesc.m_Max.m_bValue << 6);
          l_u8Flag |= (in_rDesc.m_Step.m_bValue << 5);
-         l_bResult = true;
          break;
 
       // Запись S8 параметров
@@ -216,17 +182,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_s8Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddS8(in_rDesc.m_Min.m_s8Value);
+            AddS8(in_rDesc.m_Min.m_s8Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_s8Value)
+         if(in_rDesc.m_Max.m_s8Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddS8(in_rDesc.m_Max.m_s8Value);
+            AddS8(in_rDesc.m_Max.m_s8Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_s8Value)
+         if(in_rDesc.m_Step.m_s8Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddS8(in_rDesc.m_Step.m_s8Value);
+            AddS8(in_rDesc.m_Step.m_s8Value);
          }
          break;
 
@@ -235,17 +201,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_u8Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddU8(in_rDesc.m_Min.m_u8Value);
+            AddU8(in_rDesc.m_Min.m_u8Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_u8Value)
+         if(in_rDesc.m_Max.m_u8Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddU8(in_rDesc.m_Max.m_u8Value);
+            AddU8(in_rDesc.m_Max.m_u8Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_u8Value)
+         if(in_rDesc.m_Step.m_u8Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddU8(in_rDesc.m_Step.m_u8Value);
+            AddU8(in_rDesc.m_Step.m_u8Value);
          }
          break;
 
@@ -254,17 +220,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_s16Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddS16LE(in_rDesc.m_Min.m_s16Value);
+            AddS16LE(in_rDesc.m_Min.m_s16Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_s16Value)
+         if(in_rDesc.m_Max.m_s16Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddS16LE(in_rDesc.m_Max.m_s16Value);
+            AddS16LE(in_rDesc.m_Max.m_s16Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_s16Value)
+         if(in_rDesc.m_Step.m_s16Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddS16LE(in_rDesc.m_Step.m_s16Value);
+            AddS16LE(in_rDesc.m_Step.m_s16Value);
          }
          break;
 
@@ -273,17 +239,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_u16Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddU16LE(in_rDesc.m_Min.m_u16Value);
+            AddU16LE(in_rDesc.m_Min.m_u16Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_u16Value)
+         if(in_rDesc.m_Max.m_u16Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddU16LE(in_rDesc.m_Max.m_u16Value);
+            AddU16LE(in_rDesc.m_Max.m_u16Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_u16Value)
+         if(in_rDesc.m_Step.m_u16Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddU16LE(in_rDesc.m_Step.m_u16Value);
+            AddU16LE(in_rDesc.m_Step.m_u16Value);
          }
          break;
 
@@ -292,17 +258,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_s32Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddS32LE(in_rDesc.m_Min.m_s32Value);
+            AddS32LE(in_rDesc.m_Min.m_s32Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_s32Value)
+         if(in_rDesc.m_Max.m_s32Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddS32LE(in_rDesc.m_Max.m_s32Value);
+            AddS32LE(in_rDesc.m_Max.m_s32Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_s32Value)
+         if(in_rDesc.m_Step.m_s32Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddS32LE(in_rDesc.m_Step.m_s32Value);
+            AddS32LE(in_rDesc.m_Step.m_s32Value);
          }
          break;
 
@@ -321,17 +287,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_u32Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddU32LE(in_rDesc.m_Min.m_u32Value);
+            AddU32LE(in_rDesc.m_Min.m_u32Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_u32Value)
+         if(in_rDesc.m_Max.m_u32Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddU32LE(in_rDesc.m_Max.m_u32Value);
+            AddU32LE(in_rDesc.m_Max.m_u32Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_u32Value)
+         if(in_rDesc.m_Step.m_u32Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddU32LE(in_rDesc.m_Step.m_u32Value);
+            AddU32LE(in_rDesc.m_Step.m_u32Value);
          }
          break;
 
@@ -340,17 +306,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_f32Value != 0.0f)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddF32LE(in_rDesc.m_Min.m_f32Value);
+            AddF32LE(in_rDesc.m_Min.m_f32Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_f32Value != 0.0f)
+         if(in_rDesc.m_Max.m_f32Value != 0.0f)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddF32LE(in_rDesc.m_Max.m_f32Value);
+            AddF32LE(in_rDesc.m_Max.m_f32Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_f32Value != 0.0f)
+         if(in_rDesc.m_Step.m_f32Value != 0.0f)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddF32LE(in_rDesc.m_Step.m_f32Value);
+            AddF32LE(in_rDesc.m_Step.m_f32Value);
          }
          break;
 
@@ -359,17 +325,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_s64Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddS64LE(in_rDesc.m_Min.m_s64Value);
+            AddS64LE(in_rDesc.m_Min.m_s64Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_s64Value)
+         if(in_rDesc.m_Max.m_s64Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddS64LE(in_rDesc.m_Max.m_s64Value);
+            AddS64LE(in_rDesc.m_Max.m_s64Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_s64Value)
+         if(in_rDesc.m_Step.m_s64Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddS64LE(in_rDesc.m_Step.m_s64Value);
+            AddS64LE(in_rDesc.m_Step.m_s64Value);
          }
          break;
 
@@ -378,17 +344,17 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_u64Value)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddU64LE(in_rDesc.m_Min.m_u64Value);
+            AddU64LE(in_rDesc.m_Min.m_u64Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_u64Value)
+         if(in_rDesc.m_Max.m_u64Value)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddU64LE(in_rDesc.m_Max.m_u64Value);
+            AddU64LE(in_rDesc.m_Max.m_u64Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_u64Value)
+         if(in_rDesc.m_Step.m_u64Value)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddU64LE(in_rDesc.m_Step.m_u64Value);
+            AddU64LE(in_rDesc.m_Step.m_u64Value);
          }
          break;
 
@@ -397,52 +363,48 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          if(in_rDesc.m_Min.m_f64Value != 0.0)
          {
             l_u8Flag |= (1 << 7);
-            l_bResult = AddF64LE(in_rDesc.m_Min.m_f64Value);
+            AddF64LE(in_rDesc.m_Min.m_f64Value);
          }
-         if(l_bResult && in_rDesc.m_Max.m_f64Value != 0.0)
+         if(in_rDesc.m_Max.m_f64Value != 0.0)
          {
             l_u8Flag |= (1 << 6);
-            l_bResult = AddF64LE(in_rDesc.m_Max.m_f64Value);
+            AddF64LE(in_rDesc.m_Max.m_f64Value);
          }
-         if(l_bResult && in_rDesc.m_Step.m_f64Value != 0.0)
+         if(in_rDesc.m_Step.m_f64Value != 0.0)
          {
             l_u8Flag |= (1 << 5);
-            l_bResult = AddF64LE(in_rDesc.m_Step.m_f64Value);
+            AddF64LE(in_rDesc.m_Step.m_f64Value);
          }
          break;
 
       // Запись Time параметров
       case IVT_TIME:
          l_u8Flag |= (7 << 5);
-         l_bResult = AddTime(in_rDesc.m_Min.m_Time);
-         if(l_bResult)
-            l_bResult = AddTime(in_rDesc.m_Max.m_Time);
-         if(l_bResult)
-            l_bResult = AddTime(in_rDesc.m_Step.m_Time);
+         AddTime(in_rDesc.m_Min.m_Time);
+         AddTime(in_rDesc.m_Max.m_Time);
+         AddTime(in_rDesc.m_Step.m_Time);
          break;
 
       default:
+         SetError();
          break;
       }
       // Запишем значение типа
-      SetAnchorU8Value(l_u8Type | l_u8Flag);
+      l_u8Type |= l_u8Flag;
+      SetAnchorLE(l_pAnchor, &l_u8Type, 1);
    }
 
    // Добавление текстового описания канала
-   if(l_bResult)
-   {
-#if defined(IRIDIUM_AVR_PLATFORM)
-      // Добавление имени устройства
-      if(in_rDesc.Mem.m_bDesc)
-         l_bResult = AddStringFromFlash(in_rDesc.m_pszDescription);
-      else
-         l_bResult = AddString(in_rDesc.m_pszDescription);
+#if defined(IRIDIUM_MCU_AVR)
+   // Добавление имени устройства
+   if(in_rDesc.Mem.m_bDesc)
+      AddStringFromFlash(in_rDesc.m_pszDescription);
+   else
+      AddString(in_rDesc.m_pszDescription);
 #else
-      // Добавление имени устройства
-      l_bResult = AddString(in_rDesc.m_pszDescription);
+   // Добавление имени устройства
+   AddString(in_rDesc.m_pszDescription);
 #endif
-   }         
-   return l_bResult;
 }
 
 /**
@@ -450,26 +412,19 @@ bool CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
    на входе    :  in_rDesc - ссылка на описание канала обратной связи
    на выходе   :  успешность
 */
-bool CIridiumOutBuffer::AddTagDescription(iridium_tag_description_t& in_rDesc)
+void CIridiumOutBuffer::AddTagDescription(iridium_tag_description_t& in_rDesc)
 {
    u8 l_u8Temp = 0;
    // Добавление общего описания канала
-   bool l_bResult = AddDescription(in_rDesc.m_ID);
-   if(l_bResult)
-   {
-      // Выставим флаг владения каналом обратной связи списком глобальных переменных
-      if(in_rDesc.m_Flags.m_bOwner)
-         l_u8Temp |= 0x80;
-      // Добавление списка флагов
-      l_bResult = AddU8(l_u8Temp);
-      if(l_bResult)
-      {
-         // Добавление идентификатора глобальной переменной
-         if(l_bResult && in_rDesc.m_u16Variable)
-            l_bResult = AddU16LE(in_rDesc.m_u16Variable);
-      }
-   }
-   return l_bResult;
+   AddDescription(in_rDesc.m_ID);
+   // Выставим флаг владения каналом обратной связи списком глобальных переменных
+   if(in_rDesc.m_Flags.m_bOwner)
+      l_u8Temp |= 0x80;
+   // Добавление списка флагов
+   AddU8(l_u8Temp);
+   // Добавление идентификатора глобальной переменной
+   if(in_rDesc.m_u16Variable)
+      AddU16LE(in_rDesc.m_u16Variable);
 }
 
 /**
@@ -477,49 +432,39 @@ bool CIridiumOutBuffer::AddTagDescription(iridium_tag_description_t& in_rDesc)
    на входе    :  in_rDesc - ссылка на описание канала управления
    на выходе   :  успешность
 */
-bool CIridiumOutBuffer::AddChannelDescription(iridium_channel_description_t& in_rDesc)
+void CIridiumOutBuffer::AddChannelDescription(iridium_channel_description_t& in_rDesc)
 {
    u8 l_u8Temp = 0;
    // Добавление общего описания канала
-   bool l_bResult = AddDescription(in_rDesc.m_ID);
-   if(l_bResult)
+   AddDescription(in_rDesc.m_ID);
+   // Выставим флаг наличия глобальной переменной
+   if(in_rDesc.m_u8MaxVariables)
    {
-      // Выставим флаг наличия глобальной переменной
-      if(in_rDesc.m_u8MaxVariables)
+      // Добавление максимального количества переменных на канал
+      l_u8Temp = 0x80 | ((in_rDesc.m_u8MaxVariables - 1) & 0x1F);
+   }
+   // Выставим флаг изменения значения канала по паролю
+   if(in_rDesc.m_Flags.m_bWritePassword)
+      l_u8Temp |= 0x40;
+   // Выставим флаг чтения значения канала по паролю
+   if(in_rDesc.m_Flags.m_bReadPassword)
+      l_u8Temp |= 0x20;
+   // Добавление списка флагов
+   AddU8(l_u8Temp);
+   l_u8Temp = 0;
+   // Зарезервируем место под количество глобальных переменных связзанных с каналом управления
+   u8* l_pAnchor = CreateAnchor(1);
+   // Добавление списка глобальных переменных
+   for(u8 i = 0; i < in_rDesc.m_u8Variables; i++)
+   {
+      if(in_rDesc.m_pVariables[i])
       {
-         // Добавление максимального количества переменных на канал
-         l_u8Temp = 0x80 | (in_rDesc.m_u8MaxVariables - 1) & 0x1F;
-      }
-      // Выставим флаг изменения значения канала по паролю
-      if(in_rDesc.m_Flags.m_bWritePassword)
-         l_u8Temp |= 0x40;
-      // Выставим флаг чтения значения канала по паролю
-      if(in_rDesc.m_Flags.m_bReadPassword)
-         l_u8Temp |= 0x20;
-      // Добавление списка флагов
-      l_bResult = AddU8(l_u8Temp);
-      if(l_bResult)
-      {
-         l_u8Temp = 0;
-         // Зарезервируем место под количество глобальных переменных связзанных с каналом управления
-         l_bResult = CreateAnchorU8();
-         if(l_bResult)
-         {
-            // Добавление списка глобальных переменных
-            for(u8 i = 0; i < in_rDesc.m_u8Variables; i++)
-            {
-               if(l_bResult && in_rDesc.m_pVariables[i])
-               {
-                  l_bResult = AddU16LE(in_rDesc.m_pVariables[i]);
-                  l_u8Temp++;
-               }
-            }
-            // Запишем количество глобальных переменных связзанных с каналом управления
-            SetAnchorU8Value(l_u8Temp);
-         }
+         AddU16LE(in_rDesc.m_pVariables[i]);
+         l_u8Temp++;
       }
    }
-   return l_bResult;
+   // Запишем количество глобальных переменных связзанных с каналом управления
+   SetAnchorLE(l_pAnchor, &l_u8Temp, 1);
 }
 
 /**

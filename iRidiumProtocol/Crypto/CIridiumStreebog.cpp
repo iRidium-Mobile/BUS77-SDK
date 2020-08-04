@@ -84,29 +84,38 @@ void CIridiumStreebog::Xor512(u8* out_pDst, u8* in_pA, u8* in_pB)
    Трансформация значений вектора на значения из SBox массива
    на входе    :  out_pDst - указатель на вектор который надо трансформировать
    на выходе   :  *
-*/
+*//*
 void CIridiumStreebog::S(u8* out_pDst)
 {
    for(u8 i = 0; i < STREEBOG_BLOCK_SIZE; i++)
    {
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
       out_pDst[i] = pgm_read_byte(&g_aSBox[out_pDst[i]]);
 #else
       out_pDst[i] = g_aSBox[out_pDst[i]];
 #endif
    }
-}
+}*/
 
 /**
-   P и L преобразование
+   SBox, P и L преобразование
    на входе    :  out_pDst - указатель на вектор который нужно преобразовать
    на выходе   :  *
 */
-void CIridiumStreebog::LP(u8* out_pDst)
+void CIridiumStreebog::SLP(u8* out_pDst)
 {
    u8 l_aVal[8];
    u8 l_aTmp[STREEBOG_BLOCK_SIZE];
-   memcpy(l_aTmp, out_pDst, STREEBOG_BLOCK_SIZE);
+   //memcpy(l_aTmp, out_pDst, STREEBOG_BLOCK_SIZE);
+
+   for(u8 i = 0; i < STREEBOG_BLOCK_SIZE; i++)
+   {
+#if defined(IRIDIUM_MCU_AVR)
+      l_aTmp[i] = pgm_read_byte(&g_aSBox[out_pDst[i]]);
+#else
+      l_aTmp[i] = g_aSBox[out_pDst[i]];
+#endif
+   }
 
    for(u8 i = 0; i < 8; i++)
    {
@@ -123,7 +132,7 @@ void CIridiumStreebog::LP(u8* out_pDst)
             if(l_pPtr[i] & l_u8Mask)
             {
                for(u8 l = 0; l < 8; l++)
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
                   l_aVal[l] ^= pgm_read_byte(&l_pTab[l]);
 #else
                   l_aVal[l] ^= l_pTab[l];
@@ -157,12 +166,12 @@ void CIridiumStreebog::E(u8* out_pDst, u8* in_pK, u8* in_pM)
    u8* l_pPtr = (u8*)g_aIterationConstants;
    for(u8 i = 0; i < 12; i++)
    {
-      S(out_pDst);
-      LP(out_pDst);
+      //S(out_pDst);
+      SLP(out_pDst);
 
       for(u8 j = 0; j < STREEBOG_BLOCK_SIZE; j++)
       {
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
          l_aK[j] ^= pgm_read_byte(l_pPtr);
 #else
          l_aK[j] ^= *l_pPtr;
@@ -170,8 +179,8 @@ void CIridiumStreebog::E(u8* out_pDst, u8* in_pK, u8* in_pM)
          l_pPtr++;
       }
 
-      S(l_aK);
-      LP(l_aK);
+      //S(l_aK);
+      SLP(l_aK);
 
       Xor512(out_pDst, l_aK, out_pDst);
    }
@@ -194,8 +203,8 @@ void CIridiumStreebog::g_N(u8* out_pDst, u8* in_pN, u8* in_pM)
    if(in_pN)
       Xor512(out_pDst, out_pDst, in_pN);
 
-   S(out_pDst);
-   LP(out_pDst);
+   //S(out_pDst);
+   SLP(out_pDst);
 
    E(out_pDst, out_pDst, in_pM);
 
@@ -243,7 +252,7 @@ size_t CIridiumStreebog::Calc(const void* in_pBuffer, size_t in_stSize, u8* out_
          }
          
          // Кодирование блока менее 64 байт
-         u8 l_u8Padding = STREEBOG_BLOCK_SIZE - in_stSize;;
+         u8 l_u8Padding = STREEBOG_BLOCK_SIZE - in_stSize;
          if(l_u8Padding)
          {
             memset(l_aM, 0x00, l_u8Padding - 1);

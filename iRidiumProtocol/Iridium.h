@@ -43,10 +43,12 @@
 #define IRIDIUM_MESSAGE_SYSTEM_SEARCH              0x03  // Поиск всех устройств
 #define IRIDIUM_MESSAGE_SYSTEM_DEVICE_INFO         0x04  // Получение информации об устройстве
 #define IRIDIUM_MESSAGE_SYSTEM_SET_LID             0x05  // Установить локальный идентификатор
+#define IRIDIUM_MESSAGE_SYSTEM_SESSION_TOKEN       0x08  // Передача токена серверу
 #define IRIDIUM_MESSAGE_SYSTEM_SMART_API           0x0A  // Получение информации о Smart API
 // Работа с глобальными переменными
 #define IRIDIUM_MESSAGE_SET_VARIABLE               0x10  // Установка значения глобальной переменной
 #define IRIDIUM_MESSAGE_GET_VARIABLE               0x11  // Получение значения глобальной переменной
+#define IRIDIUM_MESSAGE_DELETE_VARIABLE            0x12  // Удаление глобальной переменной
 // Работа с каналами обратной связи
 #define IRIDIUM_MESSAGE_GET_TAGS                   0x20  // Получение списка каналов обратной связи
 #define IRIDIUM_MESSAGE_LINK_TAG_AND_VARIABLE      0x24  // Связывание канала обратной связи и списка глобальных переменных
@@ -78,27 +80,38 @@ enum eIridiumGroup
 };
 
 // Флаги свойств устройства
-#define IRIDIUM_DEVICE_FLAG_GATE                   0x80  // Устройство имеет собтвенную шину
-#define IRIDIUM_DEVICE_FLAG_FIRMWARE               0x40  // Устройство может быть перепрошито
-
-#define IRIDIUM_DEVICE_FLAG_MASK                   0xF0  // Маска для отделения групп устройства
+#define IRIDIUM_DEVICE_FLAG_BOOT                   0x80  // [1000 0000] Устройство находится в режиме загрузчика
+#define IRIDIUM_DEVICE_FLAG_GATE                   0x40  // [0100 0000] Устройство имеет собственную шину
+#define IRIDIUM_DEVICE_FLAG_FIRMWARE               0x20  // [0010 0000] Устройство может быть перепрошито
+#define IRIDIUM_DEVICE_FLAG_RECERVED               0x10  // [0001 0000] Зарезервировано
+#define IRIDIUM_DEVICE_FLAG_ACTUATOR               0x08  // [0000 1000] Устройство обладает свойствами исполнительного устройства
+#define IRIDIUM_DEVICE_FLAG_PLC                    0x04  // [0000 0100] Устройство обладает свойствами свободно програмируемым контроллером
+#define IRIDIUM_DEVICE_FLAG_PANEL                  0x02  // [0000 0010] Устройство обладает свойствами панели
+#define IRIDIUM_DEVICE_FLAG_UTILITY                0x01  // [0000 0001] Устройство обладает свойствами утилиты
 
 // Режим работы с потоком
 enum eIridiumStreamMode
 {
    IRIDIUM_STREAM_MODE_READ = 0,                   // Открытие потока для чтения
    IRIDIUM_STREAM_MODE_WRITE,                      // Открытие потока для записи
+   IRIDIUM_STREAM_MODE_READ_WRITE,                 // Открытие потока для чтения и записи
 };
 
 // Тип операции
 enum eIridiumOperation
 {
-   IRIDIUM_OPERATION_WRITE_LID = 0,                // Запись локального идентификатора
+   IRIDIUM_OPERATION_TEST_PIN = 0,                 // Проверка PIN кода
    IRIDIUM_OPERATION_READ_CHANNEL,                 // Чтение значения канала управления
    IRIDIUM_OPERATION_WRITE_CHANNEL,                // Запись значения канала управления
-   IRIDIUM_OPERATION_WRITE_TAG,                    // Запись значения канала обратной связи
    IRIDIUM_OPERATION_READ_STREAM,                  // Чтение потока
    IRIDIUM_OPERATION_WRITE_STREAM,                 // Запись потока
+};
+
+// Идентификаторы источника ошибки
+enum eIridiumErrorSource
+{
+   IRIDIUM_ERROR_PROCESSING = 0,                   // Ошибка произошла во время обработки пакета
+   IRIDIUM_ERROR_RECEIVED,                         // Ошибка была получена от удаленного устройства
 };
 
 // Идентификаторы кодов ошибок
@@ -172,7 +185,7 @@ typedef struct iridium_search_info_s
    u8    m_u8Group;                                // Группа клиента
    char* m_pszHWID;                                // Указатель на HWID устройства
 
-#ifdef IRIDIUM_AVR_PLATFORM
+#ifdef IRIDIUM_MCU_AVR
    // Структра для хранения типа памяти в которой хранятся данные
    // false - данные в оперативной памяти
    // true  - данные в flash памяти
@@ -191,12 +204,16 @@ typedef struct iridium_device_info_s
    char* m_pszProducer;                            // Указатель на имя производителя
    char* m_pszModel;                               // Указатель на модель клиента
    char* m_pszHWID;                                // Указатель на HWID устройства
-   u32   m_u32DeviceFlags;                         // Список флагов устройства
-   u32   m_u32Version;                             // Версия устройства
+   u8    m_u8Class;                                // Класс устройства
+   u8    m_u8Processor;                            // Тип процессора
+   u8    m_u8OS;                                   // Тип операционной системы
+   u8    m_u8Flags;                                // Список флагов устройства
+   u8    m_u8FirmwareID;                           // Профиль (идентификатор прошивки) согласно классификации iRidium API
+   u8    m_aVersion[3];                            // Версия прошивки
    u32   m_u32Channels;                            // Количество каналов управления на устройстве
    u32   m_u32Tags;                                // Количество каналов обратной связи
 
-#ifdef IRIDIUM_AVR_PLATFORM
+#ifdef IRIDIUM_MCU_AVR
    // Структра для хранения типа памяти в которой хранятся данные
    // false - данные в оперативной памяти
    // true  - данные в flash памяти
@@ -214,12 +231,12 @@ typedef struct iridium_device_info_s
 typedef struct iridium_description_s
 {
    u8                m_u8Type;                     // Тип значения
-   universal_value_t m_Min;                        // Минимальное значение (для типов IVT_BOOL и IVT_STRING не используется)
-   universal_value_t m_Max;                        // Максимальное значение (для типов IVT_BOOL и IVT_STRING не используется)
-   universal_value_t m_Step;                       // Шаг значения (для типов IVT_BOOL и IVT_STRING не используется)
+   universal_value_t m_Min;                        // Минимальное значение (для типов IVT_BOOL, IVT_STRING и IVT_ARRAY_U8 не используется)
+   universal_value_t m_Max;                        // Максимальное значение (для типов IVT_BOOL, IVT_STRING и IVT_ARRAY_U8 не используется)
+   universal_value_t m_Step;                       // Шаг значения (для типов IVT_BOOL, IVT_STRING и IVT_ARRAY_U8 не используется)
    char*             m_pszDescription;             // Текстовое описание канала обратной связи
    
-#ifdef IRIDIUM_AVR_PLATFORM
+#ifdef IRIDIUM_MCU_AVR
    // Структра для хранения типа памяти в которой хранятся данные
    // false - данные в оперативной памяти
    // true  - данные в flash памяти
@@ -238,7 +255,7 @@ typedef struct iridium_tag_info_s
    u8                m_u8Type;                     // Тип значения
    universal_value_t m_Value;                      // Данные значения
    
-#ifdef IRIDIUM_AVR_PLATFORM
+#ifdef IRIDIUM_MCU_AVR
    // Структра для хранения типа памяти в которой хранятся данные
    // false - данные в оперативной памяти
    // true  - данные в flash памяти
@@ -271,7 +288,7 @@ typedef struct iridium_channel_info_s
    u8                m_u8Type;                     // Тип значения
    universal_value_t m_Value;                      // Данные значения
 
-#ifdef IRIDIUM_AVR_PLATFORM
+#ifdef IRIDIUM_MCU_AVR
    // Структра для хранения типа памяти в которой хранятся данные
    // false - данные в оперативной памяти
    // true  - данные в flash памяти

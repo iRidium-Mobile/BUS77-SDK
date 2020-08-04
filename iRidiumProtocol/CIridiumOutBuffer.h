@@ -41,12 +41,12 @@ public:
       { return false; }
 
    // Методы для добавления данных
-   bool AddMessageHeader(iridium_message_header_t& in_rMH);
-   bool AddSearchInfo(iridium_search_info_t& in_rInfo);
-   bool AddDeviceInfo(iridium_device_info_t& in_rInfo);
-   bool AddDescription(iridium_description_t& in_rDesc);
-   bool AddTagDescription(iridium_tag_description_t& in_rDesc);
-   bool AddChannelDescription(iridium_channel_description_t& in_rDesc);
+   void AddMessageHeader(iridium_message_header_t& in_rMH);
+   void AddSearchInfo(iridium_search_info_t& in_rInfo);
+   void AddDeviceInfo(iridium_device_info_t& in_rInfo);
+   void AddDescription(iridium_description_t& in_rDesc);
+   void AddTagDescription(iridium_tag_description_t& in_rDesc);
+   void AddChannelDescription(iridium_channel_description_t& in_rDesc);
 
    // Установка флага окончания данных
    void SetMessageHeaderEnd(bool in_bEnd);

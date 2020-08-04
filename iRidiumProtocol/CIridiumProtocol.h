@@ -35,7 +35,7 @@ public:
    // Системные команды
    // IRIDIUM_MESSAGE_SYSTEM_PING (0x02)
 #if defined(IRIDIUM_CONFIG_SYSTEM_PING_MASTER)
-   bool SendPingRequest(iridium_address_t in_DstAddr);
+   bool SendPingRequest(bool in_bBroadcast, iridium_address_t in_DstAddr);
    void ReceivePingResponse();
 #endif
 
@@ -74,6 +74,16 @@ public:
 
 #if defined(IRIDIUM_CONFIG_SYSTEM_SET_LID_SLAVE)
    void ReceiveSetLIDRequest();
+#endif
+
+   // IRIDIUM_MESSAGE_SYSTEM_SESSION_TOKEN (0x08)
+#if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_MASTER)
+   bool SendSessionTokenRequest(u64 in_u64Token);
+   void ReceiveSessionTokenResponse();
+#endif
+
+#if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_SLAVE)
+   void ReceiveSessionTokenRequest();
 #endif
 
    // IRIDIUM_MESSAGE_SYSTEM_SMART_API (0x0A)
@@ -257,7 +267,7 @@ public:
       { return m_Address; }
 
    // Вспомогательные функции
-   virtual void InitRequestPacket(iridium_address_t in_DstAddr, u8 in_u8Type)
+   virtual void InitRequestPacket(bool in_bBrodcast, iridium_address_t in_DstAddr, u8 in_u8Type)
       {}
    virtual void InitResponsePacket()
       {}
@@ -307,24 +317,21 @@ public:
    // взимодействия протокола с программой
    //////////////////////////////////////////////////////////////////////////
    // Отправка данных
-   virtual bool SendPacket(void* in_pBuffer, size_t in_stSize)
+   virtual bool SendPacket(bool in_bBroadcast, iridium_address_t in_Address, void* in_pBuffer, size_t in_stSize)
       { return false; }
 
    // Установка локального идентификатора
    virtual void SetLID(u8 in_u8LID)
       {}
-   // Проверка HWID
-   virtual bool TestHWID(const char* in_pszHWID)
+   // Сравнение HWID
+   virtual bool CompareHWID(const char* in_pszHWID)
       { return false; }
-   // Проверка PIN кода
-   virtual s8 TestPIN(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData)
+   // Проверка возможности выполнения операции
+   virtual s8 CheckOperation(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData)
       { return 1; }
 
-   // Обработчик ошибки при обработке пакета
-   virtual void ProcessingError(eIridiumError in_eError, iridium_packet_header_t* in_pPH, iridium_message_header_t* in_pMH)
-      {}
-   // Обработчик получения ошибки
-   virtual void ReceivedError(eIridiumError in_eError, iridium_packet_header_t* in_pPH, iridium_message_header_t* in_pMH)
+   // Обработчик результата обработки
+   virtual void ProcessingResult(eIridiumErrorSource in_eSource, eIridiumError in_eError, iridium_packet_header_t* in_pPH, iridium_message_header_t* in_pMH)
       {}
 
    // Получен ответ на пинг
@@ -372,7 +379,8 @@ public:
    virtual size_t GetTags()
       { return 0; }
    virtual size_t GetTagIndex(u32 in_u32TagID)
-      { return (size_t)-1; }
+      { return ~0; }
+      //{ return (size_t)~0; }
    virtual void SetTagData(iridium_tag_info_t& in_rInfo)
       { }
    virtual size_t GetTagData(size_t in_stIndex, iridium_tag_info_t& out_rInfo, size_t in_stSize)
@@ -390,7 +398,7 @@ public:
    virtual size_t GetChannels()
       { return 0; }
    virtual size_t GetChannelIndex(u32 in_u32ChannelID)
-      { return (size_t)-1; }
+      { return ~0; }//(size_t)-1; }
    virtual void SetChannelData(iridium_channel_info_t& in_rInfo)
       { }
    virtual size_t GetChannelData(size_t in_stIndex, iridium_channel_info_t& out_rInfo)
@@ -419,7 +427,7 @@ public:
 protected:
    // Вспомогательные функции
    u16 GetTID();
-   bool SendRequest(iridium_address_t in_DstAddr, u8 in_u8Type);
+   bool SendRequest(bool in_bBroadcast, iridium_address_t in_DstAddr, u8 in_u8Type);
    bool SendResponse(eIridiumError in_eCode);
 
    virtual void EndTags()
@@ -449,8 +457,8 @@ protected:
 
 #if defined(IRIDIUM_ENABLE_CIPHER)
    // Шифрование тела сообщения
-   CIridiumCipher*      m_pCipher;                 // Указатель на кодер/декодер
-   u8                   m_u8Count;                 // "Случайное" значение
+   CIridiumCipher*            m_pCipher;           // Указатель на кодер/декодер
+   u8                         m_u8Count;           // "Случайное" значение
 #endif   // defined(IRIDIUM_ENABLE_CIPHER)
 };
 #endif   // _C_IRIDIUM_PROTOCOL_H_INCLUDED_

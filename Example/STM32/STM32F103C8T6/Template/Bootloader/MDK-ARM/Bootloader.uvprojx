@@ -390,21 +390,6 @@
           <GroupName>iRidiumProtocol</GroupName>
           <Files>
             <File>
-              <FileName>Bytes.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\..\iRidiumProtocol\Bytes.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>Bytes.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\..\iRidiumProtocol\Bytes.h</FilePath>
-            </File>
-            <File>
-              <FileName>CalcParity.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\..\iRidiumProtocol\CalcParity.h</FilePath>
-            </File>
-            <File>
               <FileName>CInBuffer.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\..\..\..\..\..\iRidiumProtocol\CInBuffer.cpp</FilePath>
@@ -528,6 +513,16 @@
               <FileName>IridiumValue.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\..\..\..\..\..\iRidiumProtocol\IridiumValue.h</FilePath>
+            </File>
+            <File>
+              <FileName>IridiumBytes.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\iRidiumProtocol\IridiumBytes.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>IridiumBytes.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\..\..\..\..\iRidiumProtocol\IridiumBytes.h</FilePath>
             </File>
           </Files>
         </Group>

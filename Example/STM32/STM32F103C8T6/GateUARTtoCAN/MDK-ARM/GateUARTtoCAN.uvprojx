@@ -7,7 +7,7 @@
 
   <Targets>
     <Target>
-      <TargetName>GateUARTtoCAN</TargetName>
+      <TargetName>GateCOMtoCAN</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
       <pCCUsed>5060422::V5.06 update 4 (build 422)::ARMCC</pCCUsed>
@@ -335,7 +335,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;..\..\Common;..\..\..\..\..\iRidiumProtocol;..\..\..\..\..\iRidiumProtocol\Crypto;..\iRidiumDevice</IncludePath>
+              <IncludePath>../Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;..\..\Common;..\iRidiumDevice;..\..\..\..\..\iRidiumProtocol</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -492,207 +492,12 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Common</GroupName>
-          <Files>
-            <File>
-              <FileName>CCanPort.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\Common\CCanPort.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CCanPort.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\Common\CCanPort.h</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>iRidiumProtocol</GroupName>
-          <Files>
-            <File>
-              <FileName>Bytes.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Bytes.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>Bytes.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Bytes.h</FilePath>
-            </File>
-            <File>
-              <FileName>CalcParity.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CalcParity.h</FilePath>
-            </File>
-            <File>
-              <FileName>CInBuffer.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CInBuffer.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CInBuffer.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CInBuffer.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumBusInBuffer.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumBusInBuffer.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumBusInBuffer.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumBusInBuffer.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumBusOutBuffer.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumBusOutBuffer.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumBusOutBuffer.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumBusOutBuffer.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumBusProtocol.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumBusProtocol.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumBusProtocol.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumBusProtocol.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumInBuffer.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumInBuffer.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumInBuffer.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumInBuffer.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumOutBuffer.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumOutBuffer.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumOutBuffer.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumOutBuffer.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumProtocol.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumProtocol.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumProtocol.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\CIridiumProtocol.h</FilePath>
-            </File>
-            <File>
-              <FileName>COutBuffer.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\COutBuffer.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>COutBuffer.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\COutBuffer.h</FilePath>
-            </File>
-            <File>
-              <FileName>Iridium.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Iridium.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>Iridium.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Iridium.h</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumBus.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\IridiumBus.h</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumCRC16.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\IridiumCRC16.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumCRC16.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\IridiumCRC16.h</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumPlatform.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\IridiumPlatform.h</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumTime.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\IridiumTime.h</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumTypes.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\IridiumTypes.h</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumValue.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\IridiumValue.h</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>iRidiumProtocol/Crypto</GroupName>
-          <Files>
-            <File>
-              <FileName>CIridiumCipher.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Crypto\CIridiumCipher.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumCipherGrasshopper.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Crypto\CIridiumCipherGrasshopper.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumCipherGrasshopper.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Crypto\CIridiumCipherGrasshopper.h</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumStreebog.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Crypto\CIridiumStreebog.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>CIridiumStreebog.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\iRidiumProtocol\Crypto\CIridiumStreebog.h</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
           <GroupName>iRidiumDevice</GroupName>
           <Files>
             <File>
               <FileName>Device.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\iRidiumDevice\Device.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>IridiumConfig.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\iRidiumDevice\IridiumConfig.h</FilePath>
             </File>
             <File>
               <FileName>Device.h</FileName>
@@ -714,7 +519,7 @@
       <component Cclass="CMSIS" Cgroup="CORE" Cvendor="ARM" Cversion="4.3.0" condition="CMSIS Core">
         <package name="CMSIS" schemaVersion="1.3" url="http://www.keil.com/pack/" vendor="ARM" version="4.5.0"/>
         <targetInfos>
-          <targetInfo name="GateUARTtoCAN"/>
+          <targetInfo name="GateCOMtoCAN"/>
         </targetInfos>
       </component>
     </components>

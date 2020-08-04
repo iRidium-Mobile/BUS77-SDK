@@ -22,7 +22,7 @@ void SetValidEndByUTF8(char* in_pszString, size_t in_stSize, size_t in_stMaxSize
             // Если предыдущий символ завершен назначим новое колличество последующих октет
             l_s8Octets = !l_s8Octets ? 1 : -1;
             // Прервем цикл если предыдущий символ не завершен или не хватает места для продолжения
-            if(i+1 >= in_stMaxSize || !l_s8Octets)
+            if(((i+1) >= in_stMaxSize) || !l_s8Octets)
                break;
             // Запомним позицию начала символа
             l_u8OctetStart = i;

@@ -82,7 +82,7 @@
             <RunUserProg1>1</RunUserProg1>
             <RunUserProg2>1</RunUserProg2>
             <UserProg1Name>$K\ARM\ARMCC\bin\fromelf.exe --bin --output=@L.bin !L</UserProg1Name>
-            <UserProg2Name>..\..\..\..\..\Utility\FirmwareEncode.exe --in=$P@L.bin --out=$P@L.ifw --key=000102030405060708090a0b0c0d0e0ff0e0d0c0b0a09080706050403020100000000000000000000000000000000000</UserProg2Name>
+            <UserProg2Name>..\..\..\..\..\..\Utility\FirmwareEncode.exe --in=$P@L.bin --out=$P@L.ifw --key=000102030405060708090a0b0c0d0e0ff0e0d0c0b0a09080706050403020100000000000000000000000000000000000</UserProg2Name>
             <UserProg1Dos16Mode>0</UserProg1Dos16Mode>
             <UserProg2Dos16Mode>0</UserProg2Dos16Mode>
             <nStopA1X>0</nStopA1X>
@@ -390,21 +390,6 @@
           <GroupName>iRidiumProtocol</GroupName>
           <Files>
             <File>
-              <FileName>Bytes.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\..\iRidiumProtocol\Bytes.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>Bytes.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\..\iRidiumProtocol\Bytes.h</FilePath>
-            </File>
-            <File>
-              <FileName>CalcParity.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\..\..\..\..\iRidiumProtocol\CalcParity.h</FilePath>
-            </File>
-            <File>
               <FileName>CInBuffer.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\..\..\..\..\..\iRidiumProtocol\CInBuffer.cpp</FilePath>
@@ -528,6 +513,16 @@
               <FileName>IridiumValue.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\..\..\..\..\..\iRidiumProtocol\IridiumValue.h</FilePath>
+            </File>
+            <File>
+              <FileName>IridiumBytes.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\iRidiumProtocol\IridiumBytes.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>IridiumBytes.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\..\..\..\..\iRidiumProtocol\IridiumBytes.h</FilePath>
             </File>
           </Files>
         </Group>

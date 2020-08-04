@@ -24,7 +24,6 @@
 // Структура для получения параметров поиска
 typedef struct iridium_packet_s
 {
-   size_t   m_stShift;                             // Количество сдвигаемых данных в буфере
    size_t   m_stHeader;                            // Размер заголовка
    size_t   m_stBody;                              // Размер тела сообщения
    size_t   m_stSize;                              // Размер сообщения (Размер тела + CRC)

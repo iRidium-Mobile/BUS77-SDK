@@ -11,7 +11,7 @@
 #include "CDevice.h"
 
 // iRidium protocol
-#include "Bytes.h"
+#include "IridiumBytes.h"
 #include "IridiumCRC16.h"
 #include "CIridiumStreebog.h"
 #include "CIridiumCipherGrasshopper.h"
@@ -32,29 +32,38 @@
 #define FIRMWARE_READ_STREAM_ID        1           // Идентификатор потока чтения прошивки
 #define FIRMWARE_WRITE_STREAM_ID       2           // Идентификатор потока записи прошивки
 
-#define MAX_INPUTS                     1
-
 ///////////////////////////////////////////////////////////////////////////////
 // Информация об устройстве
 ///////////////////////////////////////////////////////////////////////////////
 const char g_pszProducer[]    = "iRidium";
 const char g_pszModelName[]   = "Шаблон 1.0";
 
-char g_szDeviceName[MAX_DEVICE_NAME_SIZE + 1];     // Имя устройства
 char g_pszHWID[STREEBOG_HASH_256_BYTES + 1];       // Аппаратный идентификатор шеснадцатеричное представление 128 битного числа + 1 байт
 
-u8 g_aEEPROM[EEPROM_MAX];                          // Буфер с данными энергонезависимой памяти
+typedef struct eeprom_device_s
+{
+   // Обшая структура данных (для загрузчика и прошивки)
+   eeprom_common_t   m_Common;
+   // Резервирование памяти
+   u8                m_aReserve[FLASH_PAGE_SIZE - sizeof(eeprom_common_t)];
+} eeprom_device_t;
+
+eeprom_device_t   g_EEPROM;                          // Буфер с данными энергонезависимой памяти
 
 // Информация об устройстве
 const iridium_device_info_t g_DeviceInfo =
 {
    IRIDIUM_GROUP_TYPE_ACTUATOR,
-   g_szDeviceName,
+   g_EEPROM.m_Common.m_szDeviceName,
    (char*)g_pszProducer,
    (char*)g_pszModelName,
    (char*)g_pszHWID,
-   OST_NONE << 16 | PT_ARM << 8 | DCT_MICROCONTROLLER,
-   0x00010001,
+   DCT_MICROCONTROLLER,
+   PT_ARM,
+   OST_NONE,
+   IRIDIUM_DEVICE_FLAG_FIRMWARE | IRIDIUM_DEVICE_FLAG_ACTUATOR,
+   0,
+   { 0, 0, 0 },
    0,
    0
 };
@@ -93,9 +102,6 @@ can_frame_t             g_aCANInBuffer[256];       // Массив для при
 can_frame_t             g_aCANOutBuffer[33*8];     // Массив для отправки CAN пакетов
 u16                     g_u16CANID = 0;            // Идентификатор CAN
 
-// Проверка наличия входов
-#if MAX_INPUTS != 0
-
 // Индексы кнопок
 enum eButton
 {
@@ -103,12 +109,10 @@ enum eButton
 };
 
 // Массив для работы с бинарными входами
-digital_input_t   g_aInputs[MAX_INPUTS] =
+digital_input_t   g_aInputs[] =
 {
-   GPIOA, GPIO_PIN_0, 0, 0, 0, { false, false, false, true }
+   Onboard_Button_GPIO_Port, Onboard_Button_Pin, 0, 0, 0, { false, false, false, true }
 };
-
-#endif
 
 /**
    Получение указателя на порт по хэндлеру CAN порта
@@ -297,50 +301,6 @@ bool BUS_Write(bool in_bBroadcast, u8 in_u8Address, void* in_pBuffer, size_t in_
    return g_ExtCAN.AddPacket(in_bBroadcast, in_u8Address, in_pBuffer, in_stSize);
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
-//// Работа с таймером
-/////////////////////////////////////////////////////////////////////////////////////////////////
-
-/**
-   Получение количества микросекунд
-   на входе   :  *
-   на выходе  :  количество микросекунд с начала работы
-*/
-uint32_t TIMER_micros()
-{
-   register uint32_t l_u32Ms = 0;
-   register uint32_t l_u32Cycle = 0;
-   do
-   {
-      l_u32Ms = HAL_GetTick();
-      l_u32Cycle = SysTick->VAL;
-   } while(l_u32Ms != HAL_GetTick());
-
-   return (l_u32Ms * 1000) + (g_u32TickPerUs * 1000 - l_u32Cycle) / g_u32TickPerUs;
-}
-
-/**
-   Ожидания указанного количества миллисекунд
-   на входе    :  in_u32Millis - количество миллисекунд
-   на выходе   :  *
-*/
-void TIMER_DelayMillis(uint32_t in_u32Millis)
-{
-   uint32_t l_u32End = HAL_GetTick() + in_u32Millis;
-   while(HAL_GetTick() < l_u32End) ;
-}
-
-/**
-   Ожидания указанного количества микросекунд
-   на входе    :  in_u32Micros   - количество микросекунд
-   на выходе   :  *
-*/
-void TIMER_DelayMicros(uint32_t in_u32Micros)
-{
-   uint32_t l_u32End = TIMER_micros() + in_u32Micros;
-   while(TIMER_micros() < l_u32End) ;
-}
-
 /**
    Перезагрузка микроконтроллера
    на входе    :  *
@@ -385,28 +345,13 @@ static void GenerateHWID()
 */
 CDevice::CDevice() : CIridiumBusProtocol()
 {
-   m_u16TID = 0;
-
    // Настройка входящего буфера
    m_InBuffer.SetBuffer(m_aInBuffer, IRIDIUM_BUS_IN_BUFFER_SIZE);
    m_InBuffer.Clear();
-
-   // Установка указателей на методы блокирования и разблокирования входящего буфера   
-   m_InBuffer.SetLockUnlock(LockInBuffer, UnLockInBuffer);
    
    // Настройка исходящего буфера
    m_OutBuffer.SetBuffer(IRIDIUM_BUS_MAX_HEADER_SIZE, IRIDIUM_BUS_CRC_SIZE, m_aOutBuffer, sizeof(m_aOutBuffer));
    m_OutBuffer.Clear();
-   
-   // Инициализация параметров протокола
-   m_OutPH.m_u8Type              = IRIDIUM_BUS_PROTOCOL_ID;
-   m_OutPH.m_Flags.m_bPriority   = false;
-   m_OutPH.m_Flags.m_bSegment    = false;
-   m_OutPH.m_Flags.m_bAddress    = true;
-   m_OutPH.m_Flags.m_u2Version   = IRIDIUM_PROTOCOL_BUS_VERSION;
-   m_OutPH.m_Flags.m_u3Crypt     = IRIDIUM_CRYPTION_NONE;
-   m_OutPH.m_SrcAddr             = 0;
-   m_OutPH.m_DstAddr             = 0;
 }
 
 /**
@@ -425,15 +370,13 @@ CDevice::~CDevice()
                   in_stSize   - размер данных
    на выходе   :  успешность отправки
 */
-bool CDevice::SendPacket(void* in_pBuffer, size_t in_stSize)
+bool CDevice::SendPacket(bool in_bBroadcast, iridium_address_t in_Address, void* in_pBuffer, size_t in_stSize)
 {
    while(1)
    {
       // Попробуем отправить буфер в шину
-      if(!BUS_Write(true, GetDstAddress(), in_pBuffer, in_stSize))
+      if(!BUS_Write(in_bBroadcast, in_Address, in_pBuffer, in_stSize))
       {
-         // Обработаем входящий буфер во время простоя
-         m_InBuffer.FilterNoiseAndForeignPacket(m_Address);
          // Отправка во внешний CAN порт во время простоя
          WriteToExtCan();
       } else
@@ -443,50 +386,35 @@ bool CDevice::SendPacket(void* in_pBuffer, size_t in_stSize)
 }
 
 /**
-   Блокирование доступа к входному буферу
-   на входе    :  *
-   на выходе   :  данные блокировки
+   Сравнение HWID
+   на входе    :  in_pszHWID  - указатель на строку с аппаратным идентификатором
+   на выходе   :  false - HWID не совпадает
+                  true  - HWID совпадают
 */
-u8 CDevice::LockInBuffer()
+bool CDevice::CompareHWID(const char* in_pszHWID)
 {
-   //HAL_NVIC_DisableIRQ(USART2_IRQn);
-   return 0;
-}
-
-/**
-   Разблокирование доступа к входному буферу
-   на входе    :  in_pData - данные блокировки
-   на выходе   :  *
-*/
-void CDevice::UnLockInBuffer(u8 in_u8Data)
-{
+   // Проверка входящего параметра
+   return (in_pszHWID && !strcmp(in_pszHWID, g_pszHWID)) ? true : false;
 }
 
 /**
    Установка локального идентификатора
-   на входе    :  in_pszHWID  - указатель на HWID устройства
-                  in_u8LID    - локальный идентификатор устройства
+   на входе    :  in_u8LID - локальный идентификатор устройства
    на выходе   :  *
 */
-bool CDevice::SetLID(char* in_pszHWID, u8 in_u8LID)
+void CDevice::SetLID(u8 in_u8LID)
 {
-   bool l_bResult = false;
-   // Проверка HWID
-   if(!strcmp(in_pszHWID, g_pszHWID))
-   {
-      // Запись локального идентификатора в энергонезависимую память
-      m_Address = in_u8LID;
-      EEPROM_WriteU8(EEPROM_U8_LID, m_Address);
-      EEPROM_NeedSaveBuffer();
-      // Изменение фильтра
-      BUS_SetFilter(g_u16CANID, m_Address);
-      l_bResult = true;
-   }
-   return l_bResult;
+   // Запись локального идентификатора в энергонезависимую память
+   g_EEPROM.m_Common.m_u8LID = in_u8LID;
+   m_Address = g_EEPROM.m_Common.m_u8LID;
+   // Изменение фильтра
+   BUS_SetFilter(g_u16CANID, m_Address);
+   // Запись в энергонезависимую память
+   EEPROM_NeedSaveBuffer();
 }
 
 /**
-   Проверка PIN кода для выполнения операции
+   Проверка возможности выполнения операции
    на входе    :  in_eType    - тип операции
                   in_u32PIN   - пароль для доступа
                   in_pData    - указатель на данные
@@ -494,12 +422,12 @@ bool CDevice::SetLID(char* in_pszHWID, u8 in_u8LID)
                   = 0   - операция не доступна так как пароль не соответствует
                   < 0   - слишком много неудачных попыток, некоторое время доступ к значению канала будет заблокирован
 */
-s8 CDevice::TestPIN(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData)
+s8 CDevice::CheckOperation(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData)
 {
    s8 l_s8Result = 0;
 
    // Получение текущего PIN кода
-   u32 l_u32PIN = EEPROM_ReadU32(EEPROM_U32_PIN);
+   u32 l_u32PIN = g_EEPROM.m_Common.m_u32PIN;
 
    // Проверка наличия PIN кода, если PIN кода нет, то проверка всегда дает положительный результат
    if(l_u32PIN)
@@ -507,7 +435,7 @@ s8 CDevice::TestPIN(eIridiumOperation in_eType, u32 in_u32PIN, void* in_pData)
       switch(in_eType)
       {
          // Проверка возможности изменения значения локального адреса
-         case IRIDIUM_OPERATION_WRITE_LID:
+         case IRIDIUM_OPERATION_TEST_PIN:
             l_s8Result = (l_u32PIN == in_u32PIN);
             break;
 
@@ -637,10 +565,10 @@ size_t CDevice::StreamBlock(u8 in_u8StreamID, u8 in_u8BlockID, size_t in_stSize,
       if(l_bFirst)
       {
          // Чтение случайного числа, маркера, размера и контрольной суммы прошивки из заголовка
-         l_pBuffer = ReadU8(l_pBuffer, l_u8Marker);
-         l_pBuffer = ReadU8(l_pBuffer, l_u8Marker);
-         l_pBuffer = ReadU32LE(l_pBuffer, l_u32Size);
-         l_pBuffer = ReadU16LE(l_pBuffer, l_u16CRC);
+         l_pBuffer = ReadByte(l_pBuffer, l_u8Marker);
+         l_pBuffer = ReadByte(l_pBuffer, l_u8Marker);
+         l_pBuffer = ReadLE(l_pBuffer, &l_u32Size, 4);
+         l_pBuffer = ReadLE(l_pBuffer, &l_u16CRC, 2);
          // Уменьшение размера данных на размер заголовка
          l_stSize -= (l_pBuffer - (u8*)in_pBuffer);
          
@@ -648,9 +576,9 @@ size_t CDevice::StreamBlock(u8 in_u8StreamID, u8 in_u8BlockID, size_t in_stSize,
          if(l_u32Size && l_u8Marker == 0x77)
          {
             // Запись информации о прошивке
-            EEPROM_WriteU8(EEPROM_U8_MODE, BOOTLOADER_MODE_RUN);
-            EEPROM_WriteU32(EEPROM_U32_FIRMWARE_SIZE, l_u32Size);
-            EEPROM_WriteU16(EEPROM_U16_FIRMWARE_CRC16, l_u16CRC);
+            g_EEPROM.m_Common.m_u8Mode = BOOTLOADER_MODE_RUN;
+            g_EEPROM.m_Common.m_u32FirmwareSize = l_u32Size;
+            g_EEPROM.m_Common.m_u16FirmwareCRC16 = l_u16CRC;
             
             // Очистка памяти
             size_t l_stStart = (size_t)g_Firmware.GetPtr();
@@ -713,7 +641,7 @@ void CDevice::StreamClose(u8 in_u8StreamID)
       g_Firmware.Close();
       
       // Запишем в энергонезависимую память состояние
-      EEPROM_WriteU8(EEPROM_U8_MODE, BOOTLOADER_MODE_RUN);
+      g_EEPROM.m_Common.m_u8Mode = BOOTLOADER_MODE_RUN;
       EEPROM_ForceSaveBuffer();
       
       // Осуществим переход в загрузчик через сброс контроллера
@@ -730,14 +658,17 @@ void CDevice::Setup()
 {
    iridium_search_info_t l_Search;
    // Загрузка локального идентификатора
-   m_Address = EEPROM_ReadU8(EEPROM_U8_LID);
+   m_Address = g_EEPROM.m_Common.m_u8LID;
 
-   // Чтение имени устройства
-   for(u8 i = 0; i < MAX_DEVICE_NAME_SIZE; i++)
-      g_szDeviceName[i] = EEPROM_ReadU8(EEPROM_DEVICE_NAME + i);
-      
+   // Поставим конец строки на всякий случай
+   g_EEPROM.m_Common.m_szDeviceName[sizeof(g_EEPROM.m_Common.m_szDeviceName) - 1] = 0;
+
    // Генерация идентификатора
    GenerateHWID();
+   
+   // Обнуление PIN при первом запуске 
+   if(g_EEPROM.m_Common.m_u32PIN == 0xFFFFFFFF)
+      g_EEPROM.m_Common.m_u32PIN = 0;
    
    // Инициализация шины
    BUS_Init();
@@ -746,28 +677,23 @@ void CDevice::Setup()
    g_u16CANID = GetCRC16Modbus(1, (u8*)g_pszHWID, sizeof(g_pszHWID));
    BUS_SetFilter(g_u16CANID, m_Address);
 
-   // Проверка наличия входов
-#if MAX_INPUTS != 0
-
    // Ожидание в течении 50 миллисекунд нажатия набортной кнопки
    u32 l_u32Time = HAL_GetTick();
    while((HAL_GetTick() - l_u32Time) < 50)
-      IO_UpdateInput(g_aInputs, MAX_INPUTS);
+      IO_UpdateInput(g_aInputs, sizeof(g_aInputs) / sizeof(g_aInputs[BUTTON_ONBOARD]));
 
    // Получение состояния набортной кнопки
-   g_bPress = g_aInputs[0].m_Flags.m_bCurValue;
-
-#endif
+   g_bPress = g_aInputs[BUTTON_ONBOARD].m_Flags.m_bCurValue;
 
    // Отправка информации об устройстве
    if(GetSearchInfo(l_Search))
       SendSearchResponse(GetTID(), l_Search);
 
    // Выставим режим запуска прошивки, если не режим ожидания прошивки
-   u8 l_u8Mode = EEPROM_ReadU8(EEPROM_U8_MODE);
+   u8 l_u8Mode = g_EEPROM.m_Common.m_u8Mode;
    if(l_u8Mode != BOOTLOADER_MODE_DOWNLOAD)
    {
-      EEPROM_WriteU8(EEPROM_U8_MODE, BOOTLOADER_MODE_RUN);
+      g_EEPROM.m_Common.m_u8Mode = BOOTLOADER_MODE_RUN;
       EEPROM_ForceSaveBuffer();
    }
 }
@@ -792,7 +718,7 @@ void CDevice::Loop()
    ReadFromExtCan();
 
    // Получение режима работы
-   u8 l_u8Mode = EEPROM_ReadU8(EEPROM_U8_MODE);
+   u8 l_u8Mode = g_EEPROM.m_Common.m_u8Mode;
    
    // Если загрузчик находится в режиме загрузки прошивки
    if(l_u8Mode == BOOTLOADER_MODE_DOWNLOAD)
@@ -801,18 +727,17 @@ void CDevice::Loop()
       m_pInPH = &l_PH;
       
       // Переход в режим получения прошивки
-      EEPROM_WriteU8(EEPROM_U8_MODE, BOOTLOADER_MODE_RUN);
+      g_EEPROM.m_Common.m_u8Mode = BOOTLOADER_MODE_RUN;
       EEPROM_ForceSaveBuffer();
       
       // Открытие потока
       u8 l_u8Stream = StreamOpen(FIRMWARE_NAME, IRIDIUM_STREAM_MODE_WRITE);
       
       // Получение параметров для отправки
-      m_pInPH->m_SrcAddr         = EEPROM_ReadU16(EEPROM_U16_FIRMWARE_ADDRESS);
+      m_pInPH->m_SrcAddr         = g_EEPROM.m_Common.m_u16FirmwareAddress;
       m_InMH.m_Flags.m_u4Version = GetMessageVersion(IRIDIUM_MESSAGE_STREAM_OPEN);
       m_InMH.m_u8Type            = IRIDIUM_MESSAGE_STREAM_OPEN;
-      m_InMH.m_u16TID            = EEPROM_ReadU16(EEPROM_U16_FIRMWARE_TID);
-      
+      m_InMH.m_u16TID            = g_EEPROM.m_Common.m_u16FirmwareTID;
       // Отправка ответа
       SendStreamOpenResponse(FIRMWARE_NAME, IRIDIUM_STREAM_MODE_WRITE, l_u8Stream);
 
@@ -831,12 +756,19 @@ void CDevice::Loop()
          g_Firmware.Close();
          
          // Запишем в энергонезависимую память состояние
-         EEPROM_WriteU8(EEPROM_U8_MODE, BOOTLOADER_MODE_RUN);
+         g_EEPROM.m_Common.m_u8Mode =  BOOTLOADER_MODE_RUN;
          EEPROM_ForceSaveBuffer();
          
          // Осуществим переход в загрузчик через сброс контроллера
          Reboot();
       }
+   }
+
+   // Мигание набортного светодиода если не было зажатия набортной кнопки
+   if(!g_bPress && HAL_GetTick() - g_u32LEDTime > 1000)
+   {
+      HAL_GPIO_TogglePin(Onboard_LED_GPIO_Port, Onboard_LED_Pin);
+      g_u32LEDTime = HAL_GetTick();
    }
 }
 
@@ -847,17 +779,14 @@ void CDevice::Loop()
 */
 void CDevice::WorkInputs()
 {
-   // Проверка наличия входов
-#if MAX_INPUTS != 0
-
    iridium_search_info_t l_Search;
    // Обработка нажатий
-   IO_UpdateInput(g_aInputs, sizeof(g_aInputs) / sizeof(g_aInputs[0]));
+   IO_UpdateInput(g_aInputs, sizeof(g_aInputs) / sizeof(g_aInputs[BUTTON_ONBOARD]));
 
    // Проверка была ли зажата набортная кнопка при старте
    if(g_bPress)
    {
-      // Ожидание нажатия набортной 
+      // Если набортаная кнопка была зажата на 5 секунд, произведем сброс данных
       if(g_aInputs[BUTTON_ONBOARD].m_Flags.m_bCurValue && (HAL_GetTick() - g_aInputs[BUTTON_ONBOARD].m_u32ChangeTime) > 5000)
       {
          // Индикация сброса параметров
@@ -866,18 +795,21 @@ void CDevice::WorkInputs()
             HAL_GPIO_TogglePin(Onboard_LED_GPIO_Port, Onboard_LED_Pin);
             HAL_Delay(100);
          }
+
          // Сбросим PIN код
-         EEPROM_WriteU32(EEPROM_U32_PIN, 0);
+         g_EEPROM.m_Common.m_u32PIN = 0;
          // Отметим что устройство надо сбросить
-         EEPROM_WriteU8(EEPROM_U8_FIRMWARE_ID, 0xFF);
+         g_EEPROM.m_Common.m_u8FirmwareID = 0xFF;
          // Сброс ключа шифрования
          for(size_t i = 0; i < BLOCK_CIPHER_KEY_SIZE; i++)
-            EEPROM_WriteU8(EEPROM_KEY + i, 0);
+            g_EEPROM.m_Common.m_aKey[i] = 0;
+
          // Запись режима загрузки устройства
-         EEPROM_WriteU8(EEPROM_U8_MODE, BOOTLOADER_MODE_RUN);
+         g_EEPROM.m_Common.m_u8Mode = BOOTLOADER_MODE_RUN;
          // Насильная запись данных во флешь память
          EEPROM_ForceSaveBuffer();
          // Перезагрузка контроллера
+         HAL_Delay(100);
          Reboot();
       }
 
@@ -898,7 +830,7 @@ void CDevice::WorkInputs()
             l_eMode = BOOTLOADER_MODE_BOOT;
          }
          // Запись режима загрузки устройства
-         EEPROM_WriteU8(EEPROM_U8_MODE, l_eMode);
+         g_EEPROM.m_Common.m_u8Mode = l_eMode;
          // Насильная запись данных во флешь память
          EEPROM_ForceSaveBuffer();
          // Перезагрузка контроллера
@@ -917,8 +849,6 @@ void CDevice::WorkInputs()
          }
       }
    }
-
-#endif
 }
 
 /**
@@ -955,21 +885,18 @@ void CDevice::ReadFromExtCan()
       {
          // Установка данных буфера
          m_InBuffer.SetBuffer(l_pBuffer, l_stSize);
-         
-         // Отфильтруем лишнее
-         m_InBuffer.FilterNoiseAndForeignPacket(m_Address);
    
          // Обрабатывать входящий поток пока исходящий буфер не заполнен на половину
          if(m_InBuffer.OpenPacket())
          {
             iridium_packet_header_t* l_pPH = m_InBuffer.GetPacketHeader();
       
-            void* l_pPacketPtr = m_InBuffer.GetMessagePtr();
+            u8* l_pPacketPtr = (u8*)m_InBuffer.GetMessagePtr();
             size_t l_stPacketSize = m_InBuffer.GetMessageSize();
       
 #if defined(IRIDIUM_ENABLE_CIPHER)
             // Декодирование сообщения
-            if(DecodeMessage((eIridiumCipher)l_pPH->m_Flags.m_u3Crypt, m_InBuffer.GetMessagePtr(), m_InBuffer.GetMessageSize(), l_pPacketPtr, l_stPacketSize))
+            if(DecodeMessage(l_pPH->m_Flags.m_u3Crypt, l_pPacketPtr, l_stPacketSize))
 #endif
             {
                // Обработка сообщения
@@ -1024,13 +951,13 @@ void CDevice::WriteToExtCan()
    на входе    :  *
    на выходе   :  *
 */
-void iRidiumDevice_Init()
+void iRidiumDevice_InitEEPROM()
 {
    // Установка границ энергонезависимой памяти
    EEPROM_Init(EEPROM_START, EEPROM_END);
    
    // Включение буферизации EEPROM
-   EEPROM_SetBuffer(g_aEEPROM, EEPROM_MAX);
+   EEPROM_SetBuffer((u8*)&g_EEPROM, sizeof(g_EEPROM));
 }
 
 /**

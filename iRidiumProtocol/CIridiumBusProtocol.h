@@ -48,7 +48,7 @@ public:
 #endif
 
    // Вспомогательные функции
-   virtual void InitRequestPacket(iridium_address_t in_DstAddr, u8 in_u8Type);
+   virtual void InitRequestPacket(bool in_bBrodcast, iridium_address_t in_DstAddr, u8 in_u8Type);
    virtual void InitResponsePacket();
 
 #if defined(IRIDIUM_ENABLE_CIPHER)

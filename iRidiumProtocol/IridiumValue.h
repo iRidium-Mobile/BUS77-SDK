@@ -62,7 +62,7 @@ typedef union universal_value_s
       size_t      m_stSize;                        // Размер строки или массива
       void*       m_pPtr;                          // Указатель на строку или массив
       
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
       bool        m_bMem;                          // Определение в каком типе памяти расположены данные
 #endif
    } m_Array;

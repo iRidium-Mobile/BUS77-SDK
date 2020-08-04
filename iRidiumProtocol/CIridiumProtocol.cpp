@@ -16,7 +16,6 @@
 #include "CIridiumProtocol.h"
 #include "CIridiumInBuffer.h"
 #include "COutBuffer.h"
-#include "Bytes.h"
 #include <stdlib.h>
 
 /**
@@ -64,12 +63,13 @@ void CIridiumProtocol::Reset()
 
 /**
    Отправка запроса пинга
-   на входе    :  in_DstAddr  - адрес получателя
+   на входе    :  in_bBroadcast  - признак широковещательного запроса
+                  in_DstAddr     - адрес получателя
    на выходе   :  успешность
 */
-bool CIridiumProtocol::SendPingRequest(iridium_address_t in_DstAddr)
+bool CIridiumProtocol::SendPingRequest(bool in_bBroadcast, iridium_address_t in_DstAddr)
 {
-   return SendRequest(in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_PING);
+   return SendRequest(in_bBroadcast, in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_PING);
 }
 
 /**
@@ -135,17 +135,18 @@ void CIridiumProtocol::ReceiveSearchResponse()
 void CIridiumProtocol::ReceiveSearchRequest()
 {
    u8 l_u8Mask = 0;
-   iridium_search_info_t l_Info;
+   iridium_device_info_t l_Info;
+   iridium_search_info_t l_Search;
    memset(&l_Info, 0, sizeof(l_Info));
    // Получение маски поиска
    if(m_pInMessage->GetU8(l_u8Mask))
    {
       // Получение данных устройства и проверка поддерживает ли устройство идентификацию
-      if(GetSearchInfo(l_Info))
+      if(GetDeviceInfo(l_Info))
       {
          // Если устройство принадлежит к запрашиваемой группе, отправим информацию об устройстве
-         if(l_Info.m_u8Group & l_u8Mask)
-            SendSearchResponse(m_InMH.m_u16TID, l_Info);
+         if((l_Info.m_u8Flags & l_u8Mask) && GetSearchInfo(l_Search))
+            SendSearchResponse(m_InMH.m_u16TID, l_Search);
       }
    }
    m_eError = IRIDIUM_OK;
@@ -160,7 +161,18 @@ void CIridiumProtocol::ReceiveSearchRequest()
 */
 bool CIridiumProtocol::SendSearchResponse(u16 in_u16TID, iridium_search_info_t& in_rInfo)
 {
+   // Инициализация пакета с ответом
+   InitResponsePacket();
+
+   // Заполнение заголовка сообщения
+   m_OutMH.m_Flags.m_bNoTID      = (0 == in_u16TID);
+   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SYSTEM_SEARCH);
+   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SYSTEM_SEARCH;
+   m_OutMH.m_u16TID              = in_u16TID;
+
+/*
    // Заполнение заголовка пакета
+   m_OutPH.m_Flags.m_bSegment    = m_pInPH->m_Flags.m_bSegment;
    m_OutPH.m_Flags.m_bAddress    = true;
    m_OutPH.m_SrcAddr             = m_Address;
    m_OutPH.m_DstAddr             = m_pInPH->m_Flags.m_bAddress ? m_pInPH->m_SrcAddr : 0;
@@ -173,7 +185,7 @@ bool CIridiumProtocol::SendSearchResponse(u16 in_u16TID, iridium_search_info_t& 
    m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SYSTEM_SEARCH);
    m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SYSTEM_SEARCH;
    m_OutMH.m_u16TID              = in_u16TID;
-
+*/
    // Начало работы с пакетом
    Begin();
    // Добавление информации об устройстве в поток
@@ -193,7 +205,7 @@ bool CIridiumProtocol::SendSearchResponse(u16 in_u16TID, iridium_search_info_t& 
 */
 bool CIridiumProtocol::SendDeviceInfoRequest(iridium_address_t in_DstAddr)
 {
-   return SendRequest(in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_DEVICE_INFO);
+   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_DEVICE_INFO);
 }
 
 /**
@@ -237,9 +249,9 @@ void CIridiumProtocol::ReceiveDeviceInfoRequest()
       // Начало работы с пакетом
       Begin();
       // Добавление информации об устройстве в поток
-      l_bResult = m_pOutMessage->AddDeviceInfo(l_Info);
+      m_pOutMessage->AddDeviceInfo(l_Info);
       // Окончание работы и отправка пакета
-      if(l_bResult)
+      if(m_pOutMessage->Result())
          l_bResult = End();
    }
    // Проверка наличия ошибки
@@ -281,15 +293,16 @@ void CIridiumProtocol::ReceiveSetLIDRequest()
       // Получение нового адреса
       if(m_pInMessage->GetU8(l_u8LID))
       {
+         m_eError = IRIDIUM_OK;
          // Проверка HWID
-         if(TestHWID(l_pszHWID))
+         if(CompareHWID(l_pszHWID))
          {
             // Получение PIN кода
-            if(m_pInMessage->Size() >= 4)
+            if(m_pInMessage->Size() >= sizeof(u32))
                m_pInMessage->GetU32LE(l_u32PIN);
 
             // Проверка возможности изменения значения
-            s8 l_s8Result = TestPIN(IRIDIUM_OPERATION_WRITE_LID, l_u32PIN, 0);
+            s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, 0);
             if(l_s8Result > 0)
             {
                // Установки локального идентификатора
@@ -309,6 +322,64 @@ void CIridiumProtocol::ReceiveSetLIDRequest()
 
 #endif   // #if defined(IRIDIUM_CONFIG_SYSTEM_SET_LID_SLAVE)
 
+#if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_MASTER)
+
+/**
+   Отправка запроса на подключение к облаку
+   на входе    :  in_u64Token - токен доступа
+   нв выходе   :  успешность
+*/
+bool CIridiumProtocol::SendSessionTokenRequest(u64 in_u64Token)
+{
+   // Заполнение заголовка пакета
+   m_OutPH.m_Flags.m_bAddress = false; // Запрос всегда широковещательный
+   m_OutPH.m_Flags.m_u3Crypt  = IRIDIUM_CRYPTION_NONE;
+
+   // Заполнение заголовка сообщения
+   m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
+   m_OutMH.m_Flags.m_bError = IRIDIUM_NO_ERROR;
+   m_OutMH.m_Flags.m_bNoTID = true;
+   m_OutMH.m_Flags.m_bEnd = true;
+   m_OutMH.m_Flags.m_u4Version = GetMessageVersion(IRIDIUM_MESSAGE_SYSTEM_SESSION_TOKEN);
+   m_OutMH.m_u8Type = IRIDIUM_MESSAGE_SYSTEM_SESSION_TOKEN;
+   m_OutMH.m_u16TID = 0;
+
+   // Начало работы с пакетом
+   Begin();
+   // Добавление токена
+   m_pOutMessage->AddU64BE(in_u64Token);
+   // Окончание работы и отправка пакета
+   return End();
+}
+
+/**
+   Обработка полученого ответа на запрос подключения к облаку
+   на входе    :  *
+   на выходе   :  *
+*/
+void CIridiumProtocol::ReceiveSessionTokenResponse()
+{
+   // Получен ответ на передачу токена
+   //SendHandshakeRequest(GetSrcAddress());
+   m_eError = IRIDIUM_OK;
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_MASTER)
+
+#if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_SLAVE)
+
+/**
+   Обработка полученого запроса подключения к облаку
+   на входе    :  *
+   на выходе   :  *
+*/
+void CIridiumProtocol::ReceiveSessionTokenRequest()
+{
+   m_eError = IRIDIUM_AUTHORIZATION_ERROR;
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_SLAVE)
+
 #if defined(IRIDIUM_CONFIG_SYSTEM_SMART_API_MASTER)
 
 /**
@@ -318,7 +389,7 @@ void CIridiumProtocol::ReceiveSetLIDRequest()
 */
 bool CIridiumProtocol::SendSmartAPIRequest(iridium_address_t in_DstAddr)
 {
-   return SendRequest(in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_SMART_API);
+   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_SMART_API);
 }
 
 /**
@@ -354,7 +425,7 @@ void CIridiumProtocol::ReceiveSmartAPIResponse()
 void CIridiumProtocol::ReceiveSmartAPIRequest()
 {
    bool l_bResult = true;
-   size_t l_stRemain = (size_t)-1;
+   size_t l_stRemain = ~0;//(size_t)-1;
    universal_value_t l_Value;
 
    // Заполнение данных пакета
@@ -399,21 +470,13 @@ void CIridiumProtocol::ReceiveSmartAPIRequest()
 bool CIridiumProtocol::SendSetVariableRequest(u16 in_u16Variable, u8 in_u8Type, universal_value_t& in_rValue)
 {
    bool l_bResult = false;
-   size_t l_stRemain = (size_t)-1;
+   size_t l_stRemain = ~0;//(size_t)-1;
    // Проверка входнях данных
    if(in_u16Variable)
    {
-      // Заполнение заголовка пакета
-      m_OutPH.m_Flags.m_bAddress    = false; // Запрос всегда широковещательный
-
-      // Заполнение заголовка сообщения
-      m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
-      m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
+      // Инициализация широковещательного запроса
+      InitRequestPacket(true, 0, IRIDIUM_MESSAGE_SET_VARIABLE);
       m_OutMH.m_Flags.m_bNoTID      = true;
-      m_OutMH.m_Flags.m_bEnd        = true;
-      m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SET_VARIABLE);
-      m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SET_VARIABLE;
-
       // Выполнять пока нет ошибки и все данные значения не переданы
       l_bResult = true;
       while(l_bResult && l_stRemain)
@@ -425,10 +488,10 @@ bool CIridiumProtocol::SendSetVariableRequest(u16 in_u16Variable, u8 in_u8Type, 
          if(l_bResult)
          {
             // Добавление идентификатора глобальной переменной
-            l_bResult = m_pOutMessage->AddU16LE(in_u16Variable);
+            m_pOutMessage->AddU16LE(in_u16Variable);
 
             // Если есть хотябы один канал, закончим формирование пакета с последующей отправкой
-            if(l_bResult)
+            if(m_pOutMessage->Result())
             {
                // Установка флага конца цепочки
                m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
@@ -488,18 +551,8 @@ bool CIridiumProtocol::SendGetVariableRequest(u16 in_u16Variable)
    // Проверка входнях данных
    if(in_u16Variable)
    {
-      // Заполнение заголовка пакета
-      m_OutPH.m_Flags.m_bAddress    = false; // Запрос всегда широковещательный
-
-      // Заполнение заголовка сообщения
-      m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
-      m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
-      m_OutMH.m_Flags.m_bNoTID      = false;
-      m_OutMH.m_Flags.m_bEnd        = true;
-      m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_GET_VARIABLE);
-      m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_GET_VARIABLE;
-      m_OutMH.m_u16TID              = GetTID();
-
+      // Инициализация широковещательного запроса
+      InitRequestPacket(true, 0, IRIDIUM_MESSAGE_SET_VARIABLE);
       // Начало работы с пакетом
       Begin();
       // Добавляем идентификатор глобальной переменной
@@ -559,10 +612,14 @@ void CIridiumProtocol::ReceiveGetVariableRequest()
 */
 bool CIridiumProtocol::SendGetVariableResponse(u16 in_u16Variable, u8 in_u8Type, universal_value_t& in_rValue)
 {
-   size_t l_stPosition = (size_t)-1;
+   size_t l_stPosition = ~0;//(size_t)-1;
+
+   // Инициализация пакета ответа
+   InitResponsePacket();
+
    // Заполнение заголовка пакета
    m_OutPH.m_Flags.m_bAddress    = false; // ответ всегда широковещательный
-
+/*
    // Заполнение заголовка сообщения
    m_OutMH.m_Flags.m_bDirection  = IRIDIUM_RESPONSE;
    m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
@@ -571,7 +628,7 @@ bool CIridiumProtocol::SendGetVariableResponse(u16 in_u16Variable, u8 in_u8Type,
    m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_GET_VARIABLE);
    m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_GET_VARIABLE;
    m_OutMH.m_u16TID              = m_InMH.m_u16TID;
-
+*/
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора глобальной переменной
@@ -593,7 +650,7 @@ bool CIridiumProtocol::SendGetVariableResponse(u16 in_u16Variable, u8 in_u8Type,
 */
 bool CIridiumProtocol::SendGetTagsRequest(iridium_address_t in_DstAddr)
 {
-   return SendRequest(in_DstAddr, IRIDIUM_MESSAGE_GET_TAGS);
+   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_GET_TAGS);
 }
 
 /**
@@ -635,7 +692,7 @@ void CIridiumProtocol::ReceiveGetTagsRequest()
 {
    bool l_bResult = true;
    iridium_tag_info_t l_Tag;
-   size_t l_stPosition = (size_t)-1;
+   size_t l_stPosition = ~0;//(size_t)-1;
 
    // Инициализация пакета ответа
    InitResponsePacket();
@@ -649,7 +706,7 @@ void CIridiumProtocol::ReceiveGetTagsRequest()
       // Начало работы с пакетом
       Begin();
       // Зарезервируем количество тегов
-      m_pOutMessage->CreateAnchorU16();
+      u8* l_pAnchor = m_pOutMessage->CreateAnchor(2);
       // Обработка списка тегов
       for( ; l_stCurrent < l_stSize; l_stCurrent++)
       {
@@ -657,13 +714,13 @@ void CIridiumProtocol::ReceiveGetTagsRequest()
          size_t l_stLen = GetTagData(l_stCurrent, l_Tag, sizeof(l_Tag));
          if(l_stLen)
          {
-            l_stPosition = (size_t)-1;
+            l_stPosition = ~0;//(size_t)-1;
             // Проверка свободного места в буфере для помещения данных канала обратной связи, иначе остановка добавления данных
             if(m_pOutMessage->Free() > l_stLen)
             {
                // Запись данных тега
                m_pOutMessage->AddU32LE(l_Tag.m_u32ID);
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
                m_pOutMessage->AddStringFromFlash(l_Tag.m_pszName);
 #else
                m_pOutMessage->AddString(l_Tag.m_pszName);
@@ -677,7 +734,7 @@ void CIridiumProtocol::ReceiveGetTagsRequest()
       // Установка флага конца цепочки
       m_OutMH.m_Flags.m_bEnd = (l_stCurrent == l_stSize);
       // Обновим количество тегов
-      m_pOutMessage->SetAnchorU16LEValue(l_u16Count);
+      m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u16Count, 2);
       // Окончание работы и отправка пакета
       l_bResult = End();
    }
@@ -701,44 +758,37 @@ void CIridiumProtocol::ReceiveGetTagsRequest()
 */
 bool CIridiumProtocol::SendLinkTagAndVariableRequest(iridium_address_t in_DstAddr, u32 in_u32TagID, bool in_bOwner, u16 in_u16Variable, u32 in_u32PIN)
 {
-   bool l_bResult = false;
    u8 l_u8Temp = 0;
 
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_LINK_TAG_AND_VARIABLE);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_LINK_TAG_AND_VARIABLE);
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора канала обратной связи
-   l_bResult = m_pOutMessage->AddU32LE(in_u32TagID);
-   if(l_bResult)
+   m_pOutMessage->AddU32LE(in_u32TagID);
+   // Зарезирвируем место под флаги
+   u8* l_pAnchor = m_pOutMessage->CreateAnchor(1);
+   // Добавление PIN кода
+   if(in_u32PIN)
    {
-      // Зарезирвируем место под флаги
-      l_bResult = m_pOutMessage->CreateAnchorU8();
-      if(l_bResult)
-      {
-         // Добавление PIN кода
-         if(in_u32PIN)
-         {
-            l_bResult = m_pOutMessage->AddU32LE(in_u32PIN);
-            // Отметим что есть PIN код
-            l_u8Temp |= 0x40;
-         }
-         // Добавление идентификатора глобальной переменной
-         if(l_bResult && in_u16Variable)
-         {
-            l_bResult = m_pOutMessage->AddU16LE(in_u16Variable);
-            // Отметим что есть переменная
-            l_u8Temp |= 0x80;
-         }
-         // Запись флагов
-         m_pOutMessage->SetAnchorU8Value(l_u8Temp | (u8)in_bOwner);
-
-         // Окончание работы и отправка пакета
-         if(l_bResult)
-            l_bResult = End();
-      }
+      m_pOutMessage->AddU32LE(in_u32PIN);
+      // Добавим флаг наличия PIN код
+      l_u8Temp |= 0x40;
    }
-   return l_bResult;
+   // Добавление идентификатора глобальной переменной
+   if(in_u16Variable)
+   {
+      m_pOutMessage->AddU16LE(in_u16Variable);
+      // Добавим флаг наличия переменной
+      l_u8Temp |= 0x80;
+   }
+   // Добавление флага владения
+   l_u8Temp |= (u8)in_bOwner;
+   // Запись флагов
+   m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u8Temp, 1);
+
+   // Окончание работы и отправка пакета
+   return m_pOutMessage->Result() ? End() : false;
 }
 
 /**
@@ -781,7 +831,7 @@ void CIridiumProtocol::ReceiveLinkTagAndVariableRequest()
             m_pInMessage->GetU16LE(l_u16Variable);
 
          // Проверка возможности изменения значения
-         s8 l_s8Result = TestPIN(IRIDIUM_OPERATION_WRITE_TAG, l_u32PIN, &l_u32ID);
+         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, &l_u32ID);
          if(l_s8Result > 0)
          {
             // Связывание канала обратной связи и глобальной переменной
@@ -812,8 +862,8 @@ void CIridiumProtocol::ReceiveLinkTagAndVariableRequest()
 */
 bool CIridiumProtocol::SendGetTagDescriptionRequest(iridium_address_t in_DstAddr, u32 in_u32TagID)
 {
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_GET_TAG_DESCRIPTION);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_TAG_DESCRIPTION);
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора канала обратной связи
@@ -891,9 +941,9 @@ void CIridiumProtocol::ReceiveGetTagDescriptionRequest()
 bool CIridiumProtocol::SendSetTagValueRequest(iridium_address_t in_DstAddr, u32 in_u32TagID, u8 in_u8Type, universal_value_t& in_rValue)
 {
    bool l_bResult = true;
-   size_t l_stRemain = (size_t)-1;
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_SET_TAG_VALUE);
+   size_t l_stRemain = ~0;//(size_t)-1;
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_SET_TAG_VALUE);
 
    // Выполнять пока нет ошибки и все данные значения не переданы
    while(l_bResult && l_stRemain)
@@ -901,12 +951,12 @@ bool CIridiumProtocol::SendSetTagValueRequest(iridium_address_t in_DstAddr, u32 
       // Начало работы с пакетом
       Begin();
       // Добавление идентификатора канала обратной связи
-      l_bResult =  m_pOutMessage->AddU32LE(in_u32TagID);
-      if(l_bResult)
+      m_pOutMessage->AddU32LE(in_u32TagID);
+      if(m_pOutMessage->Result())
       {
          // Добавление значения канала обратной связи
-         l_bResult = m_pOutMessage->AddValue(in_u8Type, in_rValue, l_stRemain, 0);
-         if(l_bResult)
+         m_pOutMessage->AddValue(in_u8Type, in_rValue, l_stRemain, 0);
+         if(m_pOutMessage->Result())
          {
             // Установка флага конца цепочки
             m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
@@ -972,21 +1022,14 @@ void CIridiumProtocol::ReceiveSetTagValueRequest()
 */
 bool CIridiumProtocol::SendGetTagValueRequest(iridium_address_t in_DstAddr, u32 in_u32TagID)
 {
-   bool l_bResult = false;
-
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_GET_TAG_VALUE);
-
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_TAG_VALUE);
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора канала управления
-   l_bResult = m_pOutMessage->AddU32LE(in_u32TagID);
-   if(l_bResult)
-   {
-      // Окончание работы и отправка пакета
-      l_bResult = End();
-   }
-   return l_bResult;
+   m_pOutMessage->AddU32LE(in_u32TagID);
+   // Окончание работы и отправка пакета
+   return End();
 }
 
 /**
@@ -1029,7 +1072,7 @@ void CIridiumProtocol::ReceiveGetTagValueRequest()
    {
       // Получение индекса канала обратной связи
       size_t l_stIndex = GetTagIndex(l_u32ID);
-      if(l_stIndex != (size_t)-1)
+      if(l_stIndex != ~0)//(size_t)-1)
       {
          // Получение данных канала обратной связи
          if(GetTagData(l_stIndex, l_Tag, sizeof(l_Tag)))
@@ -1050,33 +1093,26 @@ void CIridiumProtocol::ReceiveGetTagValueRequest()
 */
 bool CIridiumProtocol::SendGetTagValueResponse(u32 in_u32TagID, iridium_tag_info_t& in_rInfo)
 {
-   bool l_bResult = true;
-   size_t l_stRemain = (size_t)-1;
+   size_t l_stRemain = ~0;//(size_t)-1;
 
    // Инициализация пакета ответа
    InitResponsePacket();
 
    // Выполнять пока нет ошибки и все данные значения не переданы
-   while(l_bResult && l_stRemain)
+   while(m_pOutMessage->Result() && l_stRemain)
    {
       // Начало работы с пакетом
       Begin();
       // Добавление идентификатора канала управления
-      l_bResult = m_pOutMessage->AddU32LE(in_u32TagID);
-      if(l_bResult)
-      {
-         // Добавление значения тега
-         l_bResult = m_pOutMessage->AddValue(in_rInfo.m_u8Type, in_rInfo.m_Value, l_stRemain, 0);
-         if(l_bResult)
-         {
-            // Установка флага конца цепочки
-            m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
-            // Окончание работы и отправка пакета
-            l_bResult = End();
-         }
-      }
+      m_pOutMessage->AddU32LE(in_u32TagID);
+      // Добавление значения тега
+      m_pOutMessage->AddValue(in_rInfo.m_u8Type, in_rInfo.m_Value, l_stRemain, 0);
+      // Установка флага конца цепочки
+      m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
+      // Окончание работы и отправка пакета
+      End();
    }
-   return l_bResult;
+   return m_pOutMessage->Result();
 }
 
 #endif   // #if defined(IRIDIUM_CONFIG_GET_TAG_VALUE_SLAVE)
@@ -1090,7 +1126,7 @@ bool CIridiumProtocol::SendGetTagValueResponse(u32 in_u32TagID, iridium_tag_info
 */
 bool CIridiumProtocol::SendGetChannelsRequest(iridium_address_t in_DstAddr)
 {
-   return SendRequest(in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNELS);
+   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNELS);
 }
 
 /**
@@ -1150,7 +1186,7 @@ void CIridiumProtocol::ReceiveGetChannelsRequest()
       Begin();
 
       // Создание точки для записи количества каналов
-      m_pOutMessage->CreateAnchorU16();
+      u8* l_pAnchor = m_pOutMessage->CreateAnchor(2);
       // Обработка списка каналов управления
       for( ; l_stCurrent < l_stSize; l_stCurrent++)
       {
@@ -1162,7 +1198,7 @@ void CIridiumProtocol::ReceiveGetChannelsRequest()
             {
                // Запись данных тега
                m_pOutMessage->AddU32LE(l_Channel.m_u32ID);
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
                m_pOutMessage->AddStringFromFlash(l_Channel.m_pszName);
 #else
                m_pOutMessage->AddString(l_Channel.m_pszName);
@@ -1175,7 +1211,7 @@ void CIridiumProtocol::ReceiveGetChannelsRequest()
       // Установка флага конца цепочки
       m_OutMH.m_Flags.m_bEnd = (l_stCurrent == l_stSize);
       // Запись количества каналов
-      m_pOutMessage->SetAnchorU16LEValue(l_u16Count);
+      m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u16Count, 2);
       // Окончание работы и отправка пакета
       l_bResult = End();
    }
@@ -1199,39 +1235,29 @@ void CIridiumProtocol::ReceiveGetChannelsRequest()
 */
 bool CIridiumProtocol::SendSetChannelValueRequest(iridium_address_t in_DstAddr, u32 in_u32ChannelID, u8 in_u8Type, universal_value_t& in_rValue, u32 in_u32PIN)
 {
-   bool l_bResult = true;
-   size_t l_stRemain = (size_t)-1;
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_SET_CHANNEL_VALUE);
+   size_t l_stRemain = ~0;//(size_t)-1;
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_SET_CHANNEL_VALUE);
 
    // Выполнять пока нет ошибки и все данные значения не переданы
-   while(l_bResult && l_stRemain)
+   while(m_pOutMessage->Result() && l_stRemain)
    {
       // Начало работы с пакетом
       Begin();
       // Добавление идентификатора канала управления
-      l_bResult = m_pOutMessage->AddU32LE(in_u32ChannelID);
-      if(l_bResult)
-      {
-         // Добавление значения тега
-         l_bResult = m_pOutMessage->AddValue(in_u8Type, in_rValue, l_stRemain, 0);
-         if(l_bResult)
-         {
-            // Добавление PIN кода
-            if(in_u32PIN)
-               l_bResult = m_pOutMessage->AddU32LE(in_u32PIN);
-            if(l_bResult)
-            {
-               // Установка флага конца цепочки
-               m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
-               // Окончание работы и отправка пакета
-               l_bResult = End();
-            }
-         }
-      }
+      m_pOutMessage->AddU32LE(in_u32ChannelID);
+      // Добавление значения тега
+      m_pOutMessage->AddValue(in_u8Type, in_rValue, l_stRemain, 0);
+      // Добавление PIN кода
+      if(in_u32PIN)
+         m_pOutMessage->AddU32LE(in_u32PIN);
+      // Установка флага конца цепочки
+      m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
+      // Окончание работы и отправка пакета
+      End();
    }
 
-   return l_bResult;
+   return m_pOutMessage->Result();
 }
 
 /**
@@ -1267,17 +1293,19 @@ void CIridiumProtocol::ReceiveSetChannelValueRequest()
       if(m_pInMessage->GetValue(l_u8Type, l_Value))
       {
          // Получение пароля доступа к каналу
-         if(m_pInMessage->Size() >= 4)
+         if(m_pInMessage->Size() >= sizeof(u32))
             m_pInMessage->GetU32LE(l_u32PIN);
 
          // Проверка возможности изменения значения
-         s8 l_s8Result = TestPIN(IRIDIUM_OPERATION_WRITE_CHANNEL, l_u32PIN, &l_u32ID);
+         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_WRITE_CHANNEL, l_u32PIN, &l_u32ID);
          if(l_s8Result > 0)
          {
             // Изменение значения канала управления
             if(SetChannelValue(l_u32ID, l_u8Type, l_Value, IRIDIUM_FLAGS_SET | m_InMH.m_Flags.m_bEnd))
+            {
+               SendResponse(IRIDIUM_OK);
                m_eError = IRIDIUM_OK;
-            else
+            } else
                m_eError = IRIDIUM_ERROR_BAD_CHANNEL_ID;
          } else
          {
@@ -1305,14 +1333,14 @@ bool CIridiumProtocol::SendLinkChannelAndVariableRequest(iridium_address_t in_Ds
 {
    u8 l_u8Temp = 0;
 
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_LINK_CHANNEL_AND_VARIABLE);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_LINK_CHANNEL_AND_VARIABLE);
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора канала управления
    m_pOutMessage->AddU32LE(in_u32ChannelID);
    // Зарезервируем место под флаги
-   m_pOutMessage->CreateAnchorU8();
+   u8* l_pAnchor = m_pOutMessage->CreateAnchor(1);
    // Добавление PIN кода
    if(in_u32PIN)
    {
@@ -1335,7 +1363,7 @@ bool CIridiumProtocol::SendLinkChannelAndVariableRequest(iridium_address_t in_Ds
    }
 
    // Добавление списка флагов
-   m_pOutMessage->SetAnchorU8Value(l_u8Temp);
+   m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u8Temp, 1);
    // Окончание работы и отправка пакета
    return End();
 }
@@ -1393,7 +1421,7 @@ void CIridiumProtocol::ReceiveLinkChannelAndVariableRequest()
          }
 
          // Проверка возможности изменения значения
-         s8 l_s8Result = TestPIN(IRIDIUM_OPERATION_WRITE_CHANNEL, l_u32PIN, &l_u32ID);
+         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, &l_u32ID);
          if(l_s8Result > 0)
          {
             // Связывание канала управления со списком глобальных переменных
@@ -1425,8 +1453,8 @@ void CIridiumProtocol::ReceiveLinkChannelAndVariableRequest()
 */
 bool CIridiumProtocol::SendGetChannelDescriptionRequest(iridium_address_t in_DstAddr, u32 in_u32ChannelID)
 {
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNEL_DESCRIPTION);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNEL_DESCRIPTION);
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора тега
@@ -1511,25 +1539,18 @@ void CIridiumProtocol::ReceiveGetChannelDescriptionRequest()
 */
 bool CIridiumProtocol::SendGetChannelValueRequest(iridium_address_t in_DstAddr, u32 in_u32ChannelID, u32 in_u32PIN)
 {
-   bool l_bResult = true;
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNEL_VALUE);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNEL_VALUE);
 
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора канала управления
-   l_bResult = m_pOutMessage->AddU32LE(in_u32ChannelID);
-   if(l_bResult)
-   {
-      // Добавление PIN кода
-      if(in_u32PIN)
-         l_bResult = m_pOutMessage->AddU32LE(in_u32PIN);
-
-      // Окончание работы и отправка пакета
-      if(l_bResult)
-         l_bResult = End();
-   }
-   return l_bResult;
+   m_pOutMessage->AddU32LE(in_u32ChannelID);
+   // Добавление PIN кода
+   if(in_u32PIN)
+      m_pOutMessage->AddU32LE(in_u32PIN);
+   // Окончание работы и отправка пакета
+   return End();
 }
 
 /**
@@ -1572,15 +1593,15 @@ void CIridiumProtocol::ReceiveGetChannelValueRequest()
    if(m_pInMessage->GetU32LE(l_u32ID))
    {
       // Получение PIN, если таковой есть
-      if(m_pInMessage->Size() >= 4)
+      if(m_pInMessage->Size() >= sizeof(u32))
          m_pInMessage->GetU32LE(l_u32PIN);
 
       // Получение индекса канала управления
       size_t l_stIndex = GetChannelIndex(l_u32ID);
-      if(l_stIndex != (size_t)-1)
+      if(l_stIndex != ~0)//(size_t)-1)
       {
          // Проверка PIN кода
-         s8 l_s8Result = TestPIN(IRIDIUM_OPERATION_READ_CHANNEL, l_u32PIN, &l_u32ID);
+         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_READ_CHANNEL, l_u32PIN, &l_u32ID);
          if(l_s8Result > 0)
          {
             // Получение данных канала обратной связи
@@ -1607,33 +1628,26 @@ void CIridiumProtocol::ReceiveGetChannelValueRequest()
 */
 bool CIridiumProtocol::SendGetChannelValueResponse(u32 in_u32ChannelID, iridium_channel_info_t& in_rInfo)
 {
-   bool l_bResult = true;
-   size_t l_stRemain = (size_t)-1;
+   size_t l_stRemain = ~0;//(size_t)-1;
 
    // Инициализация пакета ответа
    InitResponsePacket();
 
    // Выполнять пока нет ошибки и все данные значения не переданы
-   while(l_bResult && l_stRemain)
+   while(m_pOutMessage->Result() && l_stRemain)
    {
       // Начало работы с пакетом
       Begin();
       // Добавление идентификатора канала управления
-      l_bResult = m_pOutMessage->AddU32LE(in_u32ChannelID);
-      if(l_bResult)
-      {
-         // Добавление значения тега
-         l_bResult = m_pOutMessage->AddValue(in_rInfo.m_u8Type, in_rInfo.m_Value, l_stRemain, 0);
-         if(l_bResult)
-         {
-            // Установка флага конца цепочки
-            m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
-            // Окончание работы и отправка пакета
-            l_bResult = End();
-         }
-      }
+      m_pOutMessage->AddU32LE(in_u32ChannelID);
+      // Добавление значения тега
+      m_pOutMessage->AddValue(in_rInfo.m_u8Type, in_rInfo.m_Value, l_stRemain, 0);
+      // Установка флага конца цепочки
+      m_OutMH.m_Flags.m_bEnd = (l_stRemain == 0);
+      // Окончание работы и отправка пакета
+      End();
    }
-   return l_bResult;
+   return m_pOutMessage->Result();
 }
 
 #endif   // #if defined(IRIDIUM_CONFIG_GET_CHANNEL_VALUE_SLAVE)
@@ -1650,8 +1664,8 @@ bool CIridiumProtocol::SendGetChannelValueResponse(u32 in_u32ChannelID, iridium_
 */
 bool CIridiumProtocol::SendStreamOpenRequest(iridium_address_t in_DstAddr, const char* in_pszName, eIridiumStreamMode in_eMode, u32 in_u32PIN)
 {
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_STREAM_OPEN);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_STREAM_OPEN);
    // Начало работы с пакетом
    Begin();
    // Добавление имени потока
@@ -1716,10 +1730,10 @@ void CIridiumProtocol::ReceiveStreamOpenRequest()
       if(m_pInMessage->GetU8(l_u8Mode))
       {
          // Получение пина, если таковой есть
-         if(m_pInMessage->Size() >= 4)
+         if(m_pInMessage->Size() >= sizeof(u32))
             m_pInMessage->GetU32LE(l_u32PIN);
          // Проверка PIN кода
-         s8 l_s8Result = TestPIN((l_u8Mode == IRIDIUM_STREAM_MODE_READ) ? IRIDIUM_OPERATION_READ_STREAM : IRIDIUM_OPERATION_WRITE_STREAM, l_u32PIN, &l_pszName);
+         s8 l_s8Result = CheckOperation((l_u8Mode == IRIDIUM_STREAM_MODE_READ) ? IRIDIUM_OPERATION_READ_STREAM : IRIDIUM_OPERATION_WRITE_STREAM, l_u32PIN, &l_pszName);
          if(l_s8Result > 0)
          {
             // Вызов обработчика открытия потока
@@ -1752,7 +1766,7 @@ bool CIridiumProtocol::SendStreamOpenResponse(const char* in_pszName, eIridiumSt
    // Добавление имени потока
    m_pOutMessage->AddString(in_pszName);
    // Добавление режима открытия потока
-   m_pOutMessage->AddU8(in_eMode);
+   m_pOutMessage->AddU8((u8)in_eMode);
    // Добавление идентификатора открытого потока
    m_pOutMessage->AddU8(in_u8StreamID);
    // Окончание работы и отправка пакета
@@ -1774,8 +1788,8 @@ bool CIridiumProtocol::SendStreamOpenResponse(const char* in_pszName, eIridiumSt
 */
 bool CIridiumProtocol::SendStreamBlockRequest(iridium_address_t in_DstAddr, u8 in_u8StreamID, u8 in_u8BlockID, u16 in_u16Size, const void* in_pBlock)
 {
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_STREAM_BLOCK);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_STREAM_BLOCK);
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора потока
@@ -1884,8 +1898,8 @@ bool CIridiumProtocol::SendStreamBlockResponse(u8 in_u8StreamID, u8 in_u8BlockID
 */
 bool CIridiumProtocol::SendStreamCloseRequest(iridium_address_t in_DstAddr, u8 in_u8StreamID)
 {
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, IRIDIUM_MESSAGE_STREAM_CLOSE);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_STREAM_CLOSE);
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора потока
@@ -1981,21 +1995,26 @@ void CIridiumProtocol::Begin()
 */
 bool CIridiumProtocol::End()
 {
-   // Установка признака конца цепочки
-   m_pOutMessage->SetMessageHeaderEnd(m_OutMH.m_Flags.m_bEnd);
+   bool l_bResult = m_pOutMessage->Result();
+   if(l_bResult)
+   {
+      // Установка признака конца цепочки
+      m_pOutMessage->SetMessageHeaderEnd(m_OutMH.m_Flags.m_bEnd);
 
-   // Кодирование сообщения
+      // Кодирование сообщения
 #if defined(IRIDIUM_ENABLE_CIPHER)
 
-   size_t l_stMax = m_pOutMessage->GetMaxMessageSize();
-   if(EncodeMessage(m_pOutMessage->GetMessagePtr(), m_pOutMessage->GetMessageSize(), l_stMax))
-      m_pOutMessage->SetMessageSize(l_stMax);
+      size_t l_stMax = m_pOutMessage->GetMaxMessageSize();
+      if(EncodeMessage(m_pOutMessage->GetMessagePtr(), m_pOutMessage->GetMessageSize(), l_stMax))
+         m_pOutMessage->SetMessageSize(l_stMax);
 #endif
 
-   // Окончание работы с пакетом
-   m_pOutMessage->End(m_OutPH);
-   // Отправка пакета
-   return SendPacket(m_pOutMessage->GetPacketPtr(), m_pOutMessage->GetPacketSize());
+      // Окончание работы с пакетом
+      m_pOutMessage->End(m_OutPH);
+      // Отправка пакета
+      l_bResult = SendPacket(!m_OutPH.m_Flags.m_bAddress, m_OutPH.m_DstAddr, m_pOutMessage->GetPacketPtr(), m_pOutMessage->GetPacketSize());
+   }
+   return l_bResult;
 }
 
 /**
@@ -2041,7 +2060,7 @@ bool CIridiumProtocol::Resend(iridium_packet_header_t* in_pPH, const void* in_pP
       // Конец работы с пакетом
       m_pOutMessage->End(l_PH);
       // Отправка сформированного пакета
-      l_bResult = SendPacket(m_pOutMessage->GetPacketPtr(), m_pOutMessage->GetPacketSize());
+      l_bResult = SendPacket(!m_OutPH.m_Flags.m_bAddress, m_OutPH.m_DstAddr, m_pOutMessage->GetPacketPtr(), m_pOutMessage->GetPacketSize());
    }
    return l_bResult;
 }
@@ -2088,7 +2107,7 @@ bool CIridiumProtocol::ProcessMessage(iridium_packet_header_t* in_pPH, const voi
                   u8 l_u8Error = 0;
                   m_pInMessage->GetU8(l_u8Error);
                   // Сообщим о полученой ошибке
-                  ReceivedError((eIridiumError)l_u8Error, m_pInPH, &m_InMH);
+                  ProcessingResult(IRIDIUM_ERROR_RECEIVED, (eIridiumError)l_u8Error, m_pInPH, &m_InMH);
                   // Сбросим ошибку
                   m_eError = IRIDIUM_OK;
 
@@ -2107,7 +2126,7 @@ bool CIridiumProtocol::ProcessMessage(iridium_packet_header_t* in_pPH, const voi
          if(m_eError)
          {
             // Сообщим об ошибке возникшей в процессе обработки пакета
-            ProcessingError(m_eError, m_pInPH, &m_InMH);
+            ProcessingResult(IRIDIUM_ERROR_PROCESSING, m_eError, m_pInPH, &m_InMH);
          }
       }
    }
@@ -2146,6 +2165,12 @@ void CIridiumProtocol::ProcessMessageRequest()
    // Установка локального идентификатора
    case IRIDIUM_MESSAGE_SYSTEM_SET_LID:
       ReceiveSetLIDRequest();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_SLAVE)
+      // Установка локального идентификатора
+   case IRIDIUM_MESSAGE_SYSTEM_SESSION_TOKEN:
+      ReceiveSessionTokenRequest();
       break;
 #endif
 #if defined(IRIDIUM_CONFIG_SYSTEM_SMART_API_SLAVE)
@@ -2290,7 +2315,12 @@ void CIridiumProtocol::ProcessMessageResponse()
       ReceiveSetLIDResponse();
       break;
 #endif
-
+#if defined(IRIDIUM_CONFIG_SYSTEM_SESSION_TOKEN_MASTER)
+      // Установка локального идентификатора
+   case IRIDIUM_MESSAGE_SYSTEM_SESSION_TOKEN:
+      ReceiveSessionTokenResponse();
+      break;
+#endif
 #if defined(IRIDIUM_CONFIG_SYSTEM_SMART_API_MASTER)
    // Получение информации о Smart API
    case IRIDIUM_MESSAGE_SYSTEM_SMART_API:
@@ -2415,14 +2445,15 @@ u16 CIridiumProtocol::GetTID()
 
 /**
    Отправка запроса
-   на входе    :  in_DstAddr  - адрес получателя
-                  in_eType    - тип сообщения
+   на входе    :  in_bBroadcast  - признак широковещательного запроса
+                  in_DstAddr     - адрес получателя
+                  in_eType       - тип сообщения
    нв выходе   :  успешность
 */
-bool CIridiumProtocol::SendRequest(iridium_address_t in_DstAddr, u8 in_u8Type)
+bool CIridiumProtocol::SendRequest(bool in_bBroadcast, iridium_address_t in_DstAddr, u8 in_u8Type)
 {
-   // Заполнение данных пакета
-   InitRequestPacket(in_DstAddr, in_u8Type);
+   // Инициализация запроса
+   InitRequestPacket(in_bBroadcast, in_DstAddr, in_u8Type);
    // Начало работы с пакетом
    Begin();
    // Окончание работы и отправка пакета
@@ -2431,24 +2462,16 @@ bool CIridiumProtocol::SendRequest(iridium_address_t in_DstAddr, u8 in_u8Type)
 
 /**
    Отправка ответа
-   на входе    :  in_eCode    - код ошибки
+   на входе    :  in_eCode - код ошибки
    на выходе   :  успешность
 */
 bool CIridiumProtocol::SendResponse(eIridiumError in_eCode)
 {
-   // Заполнение заголовка пакета
-   m_OutPH.m_Flags.m_bAddress    = true;
-   m_OutPH.m_SrcAddr             = m_Address;
-   m_OutPH.m_DstAddr             = m_pInPH->m_SrcAddr;
+   // Инициализаци пакета ответа
+   InitResponsePacket();
 
-   // Заполнение заголовка сообщения
-   m_OutMH.m_Flags.m_bDirection  = IRIDIUM_RESPONSE;
-   m_OutMH.m_Flags.m_bError      = in_eCode ? IRIDIUM_ERROR : IRIDIUM_NO_ERROR;
-   m_OutMH.m_Flags.m_bNoTID      = false;
-   m_OutMH.m_Flags.m_bEnd        = true;
-   m_OutMH.m_Flags.m_u4Version   = m_InMH.m_Flags.m_u4Version;
-   m_OutMH.m_u8Type              = m_InMH.m_u8Type;
-   m_OutMH.m_u16TID              = m_InMH.m_u16TID;
+   // Установка флага наличия ошибки
+   m_OutMH.m_Flags.m_bError = in_eCode ? IRIDIUM_ERROR : IRIDIUM_NO_ERROR;
 
    // Начало работы с пакетом
    Begin();

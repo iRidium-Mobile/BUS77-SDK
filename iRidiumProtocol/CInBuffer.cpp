@@ -14,7 +14,7 @@
  *    Марат Гилязетдинов, Сергей Королёв  - первая версия
  *******************************************************************************/
 #include "CInBuffer.h"
-#include "Bytes.h"
+#include "IridiumBytes.h"
 
 #include <stdio.h>
 
@@ -24,10 +24,7 @@
 */
 CInBuffer::CInBuffer()
 {
-   m_pBuffer   = NULL;
-   m_pEnd      = NULL;
-   m_pReadPtr  = NULL;
-   m_pWritePtr = NULL;
+   Reset();
 }
 
 /**
@@ -50,6 +47,19 @@ void CInBuffer::SetBuffer(const void* in_pBuffer, size_t in_stSize)
    m_pEnd      = m_pBuffer + in_stSize;
    m_pReadPtr  = m_pBuffer;
    m_pWritePtr = m_pEnd;
+}
+
+/**
+   Сброс параметров буфера
+   на входе    :  *
+   на выходе   :  *
+*/
+void CInBuffer::Reset()
+{
+   m_pBuffer = NULL;
+   m_pEnd = NULL;
+   m_pReadPtr = NULL;
+   m_pWritePtr = NULL;
 }
 
 /**
@@ -157,7 +167,7 @@ bool CInBuffer::GetU8(u8& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 1) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadU8(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadByte(m_pReadPtr, out_rValue);
       l_bResult = true;
    }
    return l_bResult;
@@ -173,7 +183,7 @@ bool CInBuffer::GetS8(s8& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 1) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadS8(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadByte(m_pReadPtr, (u8&)out_rValue);
       l_bResult = true;
    }
    return l_bResult;
@@ -189,7 +199,7 @@ bool CInBuffer::GetU16LE(u16& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 2) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadU16LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 2);
       l_bResult = true;
    }
    return l_bResult;
@@ -205,7 +215,7 @@ bool CInBuffer::GetU16BE(u16& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 2) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadU16BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 2);
       l_bResult = true;
    }
    return l_bResult;
@@ -221,7 +231,7 @@ bool CInBuffer::GetS16LE(s16& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 2) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadS16LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 2);
       l_bResult = true;
    }
    return l_bResult;
@@ -237,7 +247,7 @@ bool CInBuffer::GetS16BE(s16& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 2) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadS16BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 2);
       l_bResult = true;
    }
    return l_bResult;
@@ -253,7 +263,7 @@ bool CInBuffer::GetU32LE(u32& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 4) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadU32LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 4);
       l_bResult = true;
    }
    return l_bResult;
@@ -269,7 +279,7 @@ bool CInBuffer::GetU32BE(u32& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 4) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadU32BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 4);
       l_bResult = true;
    }
    return l_bResult;
@@ -285,7 +295,7 @@ bool CInBuffer::GetS32LE(s32& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 4) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadS32LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 4);
       l_bResult = true;
    }
    return l_bResult;
@@ -301,7 +311,7 @@ bool CInBuffer::GetS32BE(s32& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 4) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadS32BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 4);
       l_bResult = true;
    }
    return l_bResult;
@@ -317,7 +327,7 @@ bool CInBuffer::GetF32LE(f32& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 4) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadF32LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 4);
       l_bResult = true;
    }
    return l_bResult;
@@ -333,7 +343,7 @@ bool CInBuffer::GetF32BE(f32& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 4) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadF32BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 4);
       l_bResult = true;
    }
    return l_bResult;
@@ -349,7 +359,7 @@ bool CInBuffer::GetU64LE(u64& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 8) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadU64LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 8);
       l_bResult = true;
    }
    return l_bResult;
@@ -365,7 +375,7 @@ bool CInBuffer::GetU64BE(u64& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 8) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadU64BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 8);
       l_bResult = true;
    }
    return l_bResult;
@@ -381,7 +391,7 @@ bool CInBuffer::GetS64LE(s64& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 8) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadS64LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 8);
       l_bResult = true;
    }
    return l_bResult;
@@ -397,7 +407,7 @@ bool CInBuffer::GetS64BE(s64& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 8) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadS64BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 8);
       l_bResult = true;
    }
    return l_bResult;
@@ -413,7 +423,7 @@ bool CInBuffer::GetF64LE(f64& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 8) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadF64LE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadLE(m_pReadPtr, &out_rValue, 8);
       l_bResult = true;
    }
    return l_bResult;
@@ -429,7 +439,7 @@ bool CInBuffer::GetF64BE(f64& out_rValue)
    bool l_bResult = false;
    if((m_pReadPtr + 8) <= m_pWritePtr)
    {
-      m_pReadPtr = ReadF64BE(m_pReadPtr, out_rValue);
+      m_pReadPtr = ReadBE(m_pReadPtr, &out_rValue, 8);
       l_bResult = true;
    }
    return l_bResult;
@@ -488,7 +498,6 @@ bool CInBuffer::GetValue(u8& out_rType, universal_value_t& out_rValue)
    bool l_bResult = false;
    bool l_bValue = false;
 
-   l_bResult = true;
    out_rType = IVT_NONE;
    memset(&out_rValue, 0, sizeof(universal_value_t));
 
@@ -587,7 +596,7 @@ bool CInBuffer::GetValue(u8& out_rType, universal_value_t& out_rValue)
                out_rValue.m_Array.m_stSize = l_u16Size;
                out_rValue.m_Array.m_pPtr = GetDataPtr();
                
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
                // Указание расположения типа памяти с данными
                out_rValue.m_Array.m_bMem = false;
 #endif
@@ -614,7 +623,7 @@ bool CInBuffer::GetValue(u8& out_rType, universal_value_t& out_rValue)
                out_rValue.m_Array.m_stSize = l_u16Size;
                out_rValue.m_Array.m_pPtr = GetDataPtr();
 
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
                // Указание расположения типа памяти с данными
                out_rValue.m_Array.m_bMem = false;
 #endif
@@ -637,11 +646,11 @@ bool CInBuffer::GetValue(u8& out_rType, universal_value_t& out_rValue)
 */
 bool CInBuffer::GetTime(iridium_time_t& out_rTime)
 {
-   bool l_bResult = false;
+   bool l_bResult = true;
    u8 l_u8Flag = 0;
    u32 l_u32Data = 0;
    // Чтение данных флагов
-   ReadU8(GetDataPtr(), l_u8Flag);
+   ReadByte(GetDataPtr(), l_u8Flag);
    // Извлечение флагов
    out_rTime.m_u8Flags = l_u8Flag & 0x3;
    // Проверка наличия данных даты

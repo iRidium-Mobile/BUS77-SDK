@@ -27,13 +27,13 @@
 #include "IridiumPlatform.h"
 
 // Таблица CRC16 modbus
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 // Таблица располагается в программной памяти
 #include <avr/pgmspace.h>
 const static u16 g_aModbusCRCTable[1024] PROGMEM =
-#else    // defined(IRIDIUM_AVR_PLATFORM)
+#else
 const static u16 g_aModbusCRCTable[1024] =
-#endif   // defined(IRIDIUM_AVR_PLATFORM)
+#endif   // defined(IRIDIUM_MCU_AVR)
 {
    0x0000, 0xc0c1, 0xc181, 0x0140, 0xc301, 0x03c0, 0x0280, 0xc241,
    0xc601, 0x06c0, 0x0780, 0xc741, 0x0500, 0xc5c1, 0xc481, 0x0440,
@@ -165,7 +165,7 @@ const static u16 g_aModbusCRCTable[1024] =
    0x6031, 0x9c30, 0xd830, 0x2431, 0x5030, 0xac31, 0xe831, 0x1430
 };
 
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 // Версия для AVR
 #define crc_n4(crc, data, table) crc ^= data; \
    crc = pgm_read_word(&table[(crc & 0xff) + 0x300]) ^ \
@@ -187,7 +187,7 @@ const static u16 g_aModbusCRCTable[1024] =
 #define  crc_n1(crc, data, table) \
    crc = (crc >> 8) ^ table[(crc & 0xff) ^ data];
 
-#endif   // defined(IRIDIUM_AVR_PLATFORM)
+#endif   // defined(IRIDIUM_MCU_AVR)
 
 /**
    Медленное вычисление CRC-16 (Modbus)

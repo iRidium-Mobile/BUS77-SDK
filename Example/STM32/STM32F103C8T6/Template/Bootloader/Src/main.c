@@ -70,7 +70,7 @@ static void MX_CAN_Init(void);
 // Связывание C и CPP кода
 //////////////////////////////////////////////////////////////////////////
 // Процедуры
-extern void iRidiumDevice_Init(void);
+extern void iRidiumDevice_InitEEPROM(void);
 extern void iRidiumDevice_Setup(void);
 extern void iRidiumDevice_Loop(void);
 
@@ -84,38 +84,52 @@ extern void iRidiumDevice_Loop(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-   // Инициализация устройства
-   iRidiumDevice_Init();
+   GPIO_InitTypeDef GPIO_InitStruct;
 
+   // GPIO Ports Clock Enable
+   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+   // Configure GPIO pin : Onboard_Button_Pin
+   GPIO_InitStruct.Pin = Onboard_Button_Pin;
+   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+   GPIO_InitStruct.Pull = GPIO_PULLUP;
+   HAL_GPIO_Init(Onboard_Button_GPIO_Port, &GPIO_InitStruct);
+
+   //ссылка на структуру памяти eeprom_common_t под именем l_pEEPROM = (приводим тип к этой же структуре) + начало памяти
+   eeprom_common_t* l_pEEPROM = (eeprom_common_t*)EEPROM_START;
    // Получение режима работы, размера текущей прошивки и ее контрольную сумму
-   eBootloaderMode l_eMode = (eBootloaderMode)EEPROM_ReadU8(EEPROM_U8_MODE);
-   u32 l_u32Size = EEPROM_ReadU32(EEPROM_U32_FIRMWARE_SIZE);
-   u16 l_u16CRC = EEPROM_ReadU16(EEPROM_U16_FIRMWARE_CRC16);
-   
-   // Проверка режима прошивки
-   if(l_eMode == BOOTLOADER_MODE_RUN)
+   eBootloaderMode l_eMode = (eBootloaderMode)l_pEEPROM->m_u8Mode;
+   u32 l_u32Size = l_pEEPROM->m_u32FirmwareSize;
+   u16 l_u16CRC = l_pEEPROM->m_u16FirmwareCRC16;
+
+   // Если набортная кнопка не зажата, пробуем запустить прошивку
+   if(GPIO_PIN_SET == HAL_GPIO_ReadPin(Onboard_Button_GPIO_Port, Onboard_Button_Pin))
    {
-      // Проверка размера и контрольной суммы прошивки
-      if(l_u32Size && l_u32Size <= FIRMWARE_SIZE && GetCRC16Modbus(0x77, (u8*)FIRMWARE_START, l_u32Size) == l_u16CRC)
+      // Если нужна загрузка или сброс прошивки
+      if(l_eMode == BOOTLOADER_MODE_RUN)
       {
-         // Прототип функции
-         typedef void (*function_t)();
-         
-         // Запрет прерывания
-         __disable_irq();
-         
-         // Изменение вектора прерываний
-         SCB->VTOR = FIRMWARE_START;
-         
-         // Вычисление указателя на прошивку
-         u32 l_u32JumpAddress = *(__IO uint32_t*)(FIRMWARE_START + 4);
-         function_t l_pJumpPtr = (function_t)l_u32JumpAddress;
-         
-         // Изменение указателя стека
-         __set_MSP(*(__IO uint32_t*)FIRMWARE_START);
-         
-         // Переход в прошивку
-         l_pJumpPtr();
+         // Проверка размера и контрольной суммы прошивки
+         if(l_u32Size && l_u32Size <= FIRMWARE_SIZE && GetCRC16Modbus(0x77, (u8*)FIRMWARE_START, l_u32Size) == l_u16CRC)
+         {
+            // Прототип функции
+            typedef void (*function_t)();
+            
+            // Запрет прерывания
+            __disable_irq();
+            
+            // �?зменение вектора прерываний
+            SCB->VTOR = FIRMWARE_START;
+            
+            // Вычисление указателя на прошивку
+            u32 l_u32JumpAddress = *(__IO uint32_t*)(FIRMWARE_START + 4);
+            function_t l_pJumpPtr = (function_t)l_u32JumpAddress;
+            
+            // �?зменение указателя стека
+            __set_MSP(*(__IO uint32_t*)FIRMWARE_START);
+            
+            // Переход в прошивку
+            l_pJumpPtr();
+         }
       }
    }
 
@@ -141,9 +155,11 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN_Init();
   /* USER CODE BEGIN 2 */
+   // Инициализация энегронезависимой памяти
+   iRidiumDevice_InitEEPROM();
+   // �?нициализация устройства
+   iRidiumDevice_Setup();
 
-   // Инициализация устройства
-  iRidiumDevice_Setup();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -259,6 +275,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Onboard_LED_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Onboard_Button_Pin */
+  GPIO_InitStruct.Pin = Onboard_Button_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(Onboard_Button_GPIO_Port, &GPIO_InitStruct);
 
 }
 

@@ -51,6 +51,8 @@
 
 #define Onboard_LED_Pin GPIO_PIN_13
 #define Onboard_LED_GPIO_Port GPIOC
+#define Onboard_Button_Pin GPIO_PIN_5
+#define Onboard_Button_GPIO_Port GPIOB
 
 /* ########################## Assert Selection ############################## */
 /**

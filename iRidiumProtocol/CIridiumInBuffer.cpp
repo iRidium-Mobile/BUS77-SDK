@@ -15,7 +15,6 @@
  *******************************************************************************/
 #include <stdio.h>
 #include "CIridiumInBuffer.h"
-#include "Bytes.h"
 
 /**
    Конструктор класса
@@ -122,9 +121,17 @@ bool CIridiumInBuffer::GetDeviceInfo(iridium_device_info_t& out_rInfo)
          l_bResult = GetString(out_rInfo.m_pszHWID);
       // Получение типа операционной системы и версии
       if(l_bResult)
-         l_bResult = GetU32LE(out_rInfo.m_u32DeviceFlags);
+         l_bResult = GetU8(out_rInfo.m_u8Class);
       if(l_bResult)
-         l_bResult = GetU32LE(out_rInfo.m_u32Version);
+         l_bResult = GetU8(out_rInfo.m_u8Processor);
+      if(l_bResult)
+         l_bResult = GetU8(out_rInfo.m_u8OS);
+      if(l_bResult)
+         l_bResult = GetU8(out_rInfo.m_u8Flags);
+      if(l_bResult)
+         l_bResult = GetU8(out_rInfo.m_u8FirmwareID);
+      if(l_bResult)
+         l_bResult = FillData(out_rInfo.m_aVersion, 3);
       // Получение количества каналов управления и обратной связи
       if(l_bResult)
       {
@@ -146,7 +153,7 @@ bool CIridiumInBuffer::GetDescription(iridium_description_t& out_rDesc)
    bool l_bMin = false;
    bool l_bMax = false;
    bool l_bStep = false;
-   l_bResult = true;
+
    memset(&out_rDesc, 0, sizeof(iridium_description_t));
    out_rDesc.m_u8Type = IVT_NONE;
 

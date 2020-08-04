@@ -22,7 +22,7 @@
 #include "IridiumTypes.h"
 
 // Таблица замены значений
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 #include <avr/pgmspace.h>
 
 const static u8 g_aSBox[256] PROGMEM =
@@ -65,7 +65,7 @@ const static u8 g_aSBox[256] =
 };
 
 // Таблица для линейной трансформации
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 const static u8 g_aMatrixA[512] PROGMEM =
 #else
 const static u8 g_aMatrixA[512] =
@@ -106,7 +106,7 @@ const static u8 g_aMatrixA[512] =
 };
 
 // Таблица блоков для циклических преобразований
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 const static u8 g_aIterationConstants[12][64] PROGMEM =
 #else
 const static u8 g_aIterationConstants[12][64] =
@@ -261,8 +261,8 @@ private:
    void AddMod512(u8* out_pDst, u8* in_pSrc, u8* in_pAdd);
    void AddMod512_u8(u8* out_pDst, u8* in_pSrc, u8 in_u8Add);
    void Xor512(u8* out_pDst, u8* in_pA, u8* in_pB);
-   void S(u8* out_pVect);
-   void LP(u8* out_pVect);
+   //void S(u8* out_pVect);
+   void SLP(u8* out_pVect);
    void X(u8* out_pDst, u8* in_pA, u8* in_pB);
    void E(u8* out_pDst, u8* in_pK, u8* in_pM);
    void g_N(u8* out_pH, u8* in_pN, u8* in_pM);

@@ -37,10 +37,10 @@
 #define IRIDIUM_EXT_ID_CAN_ID_SHIFT    13          // Сдвиг идентиифкатора устройства
 
 // Маска для сравнения Ext ID
-#define IRIDIUM_EXT_ID_COMPARE_MASK    (IRIDIUM_EXT_ID_CAN_ID_MASK << IRIDIUM_EXT_ID_CAN_ID_SHIFT) |\
-                                       (IRIDIUM_EXT_ID_TID_MASK << IRIDIUM_EXT_ID_TID_SHIFT) |\
-                                       (IRIDIUM_EXT_ID_BROADCAST_MASK << IRIDIUM_EXT_ID_BROADCAST_SHIFT) |\
-                                       (IRIDIUM_EXT_ID_ADDRESS_MASK << IRIDIUM_EXT_ID_ADDRESS_SHIFT)
+#define IRIDIUM_EXT_ID_COMPARE_MASK    ((IRIDIUM_EXT_ID_CAN_ID_MASK << IRIDIUM_EXT_ID_CAN_ID_SHIFT) | \
+                                       (IRIDIUM_EXT_ID_TID_MASK << IRIDIUM_EXT_ID_TID_SHIFT) | \
+                                       (IRIDIUM_EXT_ID_BROADCAST_MASK << IRIDIUM_EXT_ID_BROADCAST_SHIFT) | \
+                                       (IRIDIUM_EXT_ID_ADDRESS_MASK << IRIDIUM_EXT_ID_ADDRESS_SHIFT))
 
 // Структура фрейма
 typedef struct can_frame_s
@@ -58,6 +58,16 @@ typedef struct can_buffer_s
    can_frame_t*   m_pBuffer;                       // Указатель на буфер с фреймами
 
 } can_buffer_t;
+
+// Структура данных кольцевого буфера
+typedef struct can_ring_buffer_s
+{
+   size_t         m_stStart;                       // Начало данных
+   size_t         m_stCount;                       // Количество фреймов
+   size_t         m_stMax;                         // Максимальное количество фреймов
+   can_frame_t*   m_pBuffer;                       // Указатель на буфер с фреймами
+
+} can_ring_buffer_t;
 
 /**
    Класс для хранения и управления списком com портов
@@ -106,20 +116,25 @@ public:
    // Удаление фрейма
    void DeleteFrame();
 
+   void SetTransmite(bool in_bTransmite)
+      { m_bTransmite = in_bTransmite; }
+   bool IsTransmite()
+      { return m_bTransmite; }
+
 protected:
-   // Очистка буфера
-   void Clear(can_buffer_t& in_rBuffer);
+   // Сборка буфера
    size_t Assembly(can_frame_t* in_pEnd, void* out_pBuffer, size_t in_stSize);
    // Получение идентификатора транзакции
    u8 GetTID();
 
-   u8             m_u8Address;                     // Адрес порта
-   u8             m_u8TID;                         // Идентификатор транзакции
-   u16            m_u16CANID;                      // Идентификатор устройства в CAN шине
-   can_buffer_t   m_InBuffer;                      // Данные входящего буфера
-   can_buffer_t   m_OutBuffer;                     // Данные исходящего буфера
-   u8             m_aPacketBuffer[8*33];           // Данные полученого пакета
-   size_t         m_stPacketSize;                  // Размер полученого пакета
+   u8                m_u8Address;                  // Адрес порта
+   u8                m_u8TID;                      // Идентификатор транзакции
+   u16               m_u16CANID;                   // Идентификатор устройства в CAN шине
+   can_buffer_t      m_InBuffer;                   // Данные входящего буфера
+   can_ring_buffer_t m_OutBuffer;                  // Данные исходящего буфера
+   u8                m_aPacketBuffer[8*33];        // Данные полученого пакета
+   size_t            m_stPacketSize;               // Размер полученого пакета
+   bool              m_bTransmite;                 // Флаг указывающий что происходит отправка буфера
 };
 #endif   // _C_CAN_PORT_H_INCLUDED_
 

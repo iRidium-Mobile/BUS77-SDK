@@ -13,7 +13,7 @@
 
 // Шифрование
 //#define IRIDIUM_ENABLE_SIMPLE_CIPHER               // Включение простейшего шифрования
-//#define IRIDIUM_ENABLE_GRASSHOPPER_CIPHER          // Включение блочного шифрования "кузнечик"
+#define IRIDIUM_ENABLE_GRASSHOPPER_CIPHER          // Включение блочного шифрования "кузнечик"
 //#define IRIDIUM_ENABLE_AES256_CIPHER               // Включение блочного шифрования AES256
 
 #define IRIDIUM_ENABLE_IV                          // Включение вектора инициализации

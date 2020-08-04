@@ -1,56 +1,184 @@
 #include "main.h"
 #include "Device.h"
 #include "stm32f1xx_hal.h"
-#include "CCANPort.h"
-#include "CIridiumBusInBuffer.h"
-#include "IridiumCRC16.h"
-#include "IridiumBus.h"
+#include "string.h"
+
+#define START_MARKER       0xAA                    // Маркер начала пакета
+#define END_MARKER         0x55                    // Маркер конца пакета
+#define ESCAPE_MARKER      0xA5                    // Маркер экранирования
+
+#define EXT_ID_FLAG        0x80000000
+#define EXT_ID_MASK        0x7fffffff
+#define STD_ID_MASK        0x7ff
+
+// Структура фрейма
+typedef struct can_frame_s
+{
+   uint32_t m_u32ExtID;                            // Идентификатор стандарта CAN-2.0B
+   uint8_t  m_u8Size;                              // Размер данных
+   uint8_t  m_aData[8];                            // Полезная нагрузка CAN пакета
+} can_frame_t;
+
+// Структура для получения пакета
+typedef struct uart_spliter_s
+{
+   uint8_t     m_u8Index;
+   uint8_t     m_aBuffer[32];
+   bool        m_bReadPacket;
+   uint8_t     m_u8Old;
+} uart_spliter_t;
+
+class CRingBuffer
+{
+public:
+   // Конструктор/деструктор
+   CRingBuffer();
+   virtual ~CRingBuffer();
+
+   // Установка буфера
+   void SetBuffer(void* in_pBuffer, size_t in_stSize);
+
+   // Добавление/удаление CAN фрейма
+   bool AddFrame(can_frame_t* in_pFrame);
+   void SkipFrame();
+
+   // Получение CAN фрейма
+   can_frame_t* GetFrame();
+
+protected:
+   size_t         m_stMax;                         // Максимальное количество элементов
+   size_t         m_stStart;                       // Первый элемент
+   size_t         m_stSize;                        // Количество элементов
+   can_frame_t*   m_pBuffer;                       // Указатель на буфер с данными
+};
+
 
 // Внешние структуры
-extern CAN_HandleTypeDef       hcan;               // Структура для работы с CAN
-extern UART_HandleTypeDef      huart2;             // Струкутра для работы с UART
+extern CAN_HandleTypeDef   hcan;                   // Структура для работы с CAN
+extern UART_HandleTypeDef  huart2;                 // Струкутра для работы с UART
 
-char                    g_pszHWID[25];             // Для хранения уникального идентификатора CAN устройства
+static CanTxMsgTypeDef     g_aCanTxMessage;        // Структура для отправляемого сообщения
+static CanRxMsgTypeDef     g_aCanRxMessage;        // Структура для принимаемого сообщения
 
-u16                     g_u16CanID = 0;            // Идентификатор CAN фреймов устройства
-u16                     g_u16TID = 0;              // Текущий идентификатор транзакции
+bool                       g_bUARTTransmit = false;
+uint8_t                    g_u8UartByte;
+CRingBuffer                g_UARTtoCAN;
+can_frame_t                g_aUARTtoCAN[512];
 
-static CanTxMsgTypeDef  g_aCanTxMessage;           // Структура для отправляемого сообщения
-static CanRxMsgTypeDef  g_aCanRxMessage;           // Структура для принимаемого сообщения
+bool                       g_bCANTransmit = false;
+CRingBuffer                g_CANtoUART;
+can_frame_t                g_aCANtoUART[512];
+uint8_t                    g_aBuffer[64];
 
-// Входящий UART буфер
-CIridiumBusInBuffer     g_UARTInBuffer;
-u8                      g_aUARTInBuffer[IRIDIUM_BUS_IN_BUFFER_SIZE];
+uart_spliter_t             g_Spliter;
 
-// Входящий CAN буфер
-CIridiumBusInBuffer     g_CANInBuffer;
-u8                      g_aCANInBuffer[IRIDIUM_BUS_IN_BUFFER_SIZE];
+uint32_t g_u32CAN_RCV_Error = 0;
+uint32_t g_u32CAN_RCV = 0;
+uint32_t g_u32CAN_SND_Error = 0;
+uint32_t g_u32CAN_SND = 0;
 
-CCANPort                g_CAN;
-can_frame_t             g_aFromUart[512];
-can_frame_t             g_aFromCan[512];
+uint32_t g_u32UART_RCV_Error = 0;
+uint32_t g_u32UART_RCV = 0;
+uint32_t g_u32UART_SND_Error = 0;
+uint32_t g_u32UART_SND = 0;
 
-bool                    g_bTransmitEnd = true;
-uint8_t                 g_aUartBuffer[1];
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+//
+// Кольцевой буфер
+//
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+CRingBuffer::CRingBuffer()
+{
+   m_stMax     = 0;
+   m_stStart   = 0;
+   m_stSize    = 0; 
+   m_pBuffer   = NULL;
+}
 
+CRingBuffer::~CRingBuffer()
+{
+}
+
+// Установка буфера
+void CRingBuffer::SetBuffer(void* in_pBuffer, size_t in_stSize)
+{
+   m_stMax     = in_stSize / sizeof(can_frame_t);
+   m_stStart   = 0;
+   m_stSize    = 0;
+   m_pBuffer   = (can_frame_t*)in_pBuffer;
+}
+
+// Добавление/удаление CAN фрейма
+bool CRingBuffer::AddFrame(can_frame_t* in_pFrame)
+{
+   bool l_bResult = false;
+   if(m_stSize != m_stMax)
+   {
+      size_t l_stIndex = (m_stStart + m_stSize) % m_stMax;
+      memcpy(m_pBuffer + l_stIndex, in_pFrame, sizeof(can_frame_t));
+      m_stSize++;
+      l_bResult = true;
+   }
+   return l_bResult;
+}
+
+void CRingBuffer::SkipFrame()
+{
+   if(m_stSize)
+   {
+      m_stStart = (m_stStart + 1) % m_stMax;
+      m_stSize--;
+   }
+}
+
+// Получение CAN фрейма
+can_frame_t* CRingBuffer::GetFrame()
+{
+   can_frame_t* l_pResult = NULL;
+   if(m_stSize)
+      l_pResult = m_pBuffer + m_stStart;
+   return l_pResult;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+//
+// Работа с CAN
+//
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 /**
-   Поиск шинного пакета в буфере UART и отправка в буфер для формирования фреймов
-   на входе    :  *
+Обработка приходящих фреймов из CAN шины в кольцевой буфер
+   на входе    :  in_pCan  - указатель на структуру CAN
    на выходе   :  *
 */
-void FindPacketsToCan()
+void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* in_pCan)
 {
-   // Удаление шума из буфера
-   g_UARTInBuffer.FilterNoise();
+   can_frame_t l_Frame;
+   memset(&l_Frame, 0, sizeof(l_Frame));
+
+   // Извлечение полезной информации
+   if(in_pCan->pRxMsg->IDE == CAN_ID_EXT)
+      l_Frame.m_u32ExtID = in_pCan->pRxMsg->ExtId | EXT_ID_FLAG;
+   else
+      l_Frame.m_u32ExtID = in_pCan->pRxMsg->StdId;
    
-   // Найдем пакет в буфере UART
-   if(g_UARTInBuffer.OpenPacket())
-   { 
-      // Добавим пакет в буфер для формирования фреймов и отправки в CAN
-      g_CAN.AddPacket(true, 0, g_UARTInBuffer.GetPacketPtr(), g_UARTInBuffer.GetPacketSize());
-   }
-   // Закрытие шинного сообщения
-   g_UARTInBuffer.ClosePacket();
+   // Получение размера данных
+   l_Frame.m_u8Size = in_pCan->pRxMsg->DLC;
+   
+   // Скопируем полезную нагрузку
+   memcpy(l_Frame.m_aData, in_pCan->pRxMsg->Data, l_Frame.m_u8Size);
+   
+   // Добавление полученого фрейма в буфер
+   if(!g_CANtoUART.AddFrame(&l_Frame))
+      g_u32CAN_RCV_Error++;
+   
+   g_u32CAN_RCV++;
+   
+   // Включим прерыване обратно
+   HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
 }
 
 /**
@@ -58,17 +186,24 @@ void FindPacketsToCan()
    на входе    :  *
    на выходе   :  *
 */
-void SendPacketsToCan()
+static bool SendToCAN()
 {
+   bool l_bResult = false;
    // Получим фрейм для отправки в CAN
-   can_frame_t* l_pPtr = g_CAN.GetFrame();
+   can_frame_t* l_pPtr = g_UARTtoCAN.GetFrame();
    if(l_pPtr)
    {
-      // Установим расширенный размер кадра
-      hcan.pTxMsg->IDE = CAN_ID_EXT;
-      
-      // Назначаем идентификатор сообщения
-      hcan.pTxMsg->ExtId = l_pPtr->m_u32ExtID;
+      if(l_pPtr->m_u32ExtID & EXT_ID_FLAG)
+      {
+         // Расширенный размер кадра
+         hcan.pTxMsg->IDE = CAN_ID_EXT;
+         hcan.pTxMsg->ExtId = l_pPtr->m_u32ExtID & EXT_ID_MASK;
+      } else
+      {
+         // Стандартный размер кадра
+         hcan.pTxMsg->IDE = CAN_ID_STD;
+         hcan.pTxMsg->ExtId = l_pPtr->m_u32ExtID & STD_ID_MASK;
+      }
 
       // Указываем длинну сообщения
       hcan.pTxMsg->DLC = l_pPtr->m_u8Size;
@@ -76,92 +211,18 @@ void SendPacketsToCan()
       // Копируем данные для отправки
       memcpy(hcan.pTxMsg->Data, l_pPtr->m_aData, l_pPtr->m_u8Size);
       
+      g_u32CAN_SND++;
+      
       // Отправляем данные
       if(HAL_CAN_Transmit_IT(&hcan) == HAL_OK)
       {    
          // Если передача прошла успешно, удалим отправленный фрейм
-         g_CAN.DeleteFrame();
-      }
+         g_UARTtoCAN.SkipFrame();
+         l_bResult = true;
+      } else
+         g_u32CAN_SND_Error++;
    }
-}
-
-/**
-   Сборка пакета из фреймов, складывание в буфер для отправки в UART,
-      поиск шинного пакета в буфере и отправка
-   на входе    :  *
-   на выходе   :  *
-*/
-void FindAndSendToUart()
-{
-   void* l_pBuffer = NULL;
-   size_t l_stSize = 0;
-   
-   // Получим размер помещенного в буфер пакета
-   bool l_bResult = g_CAN.GetPacket(l_pBuffer, l_stSize);
-   
-   // Отключим прерывания для избежания потери данных во время сдвига
-   HAL_NVIC_DisableIRQ(CAN1_RX1_IRQn);
-   HAL_NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
-
-   // Удаление обработаных пакетов
-   g_CAN.Flush();
-
-   // Вернем прерывания
-   HAL_NVIC_EnableIRQ(CAN1_RX1_IRQn);
-   HAL_NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
-
-   // Если в буфере есть данные
-   if(l_bResult)
-   {
-      // Добавление пакета в буфер 
-      g_CANInBuffer.Add(l_pBuffer, l_stSize);
-
-      // Поиск и удаление мусора
-      g_CANInBuffer.FilterNoise();
-      
-      if(g_CANInBuffer.OpenPacket())
-      {
-         // Отключим прерывания UART перед установкой флага false, что бы не получить true раньше
-         HAL_NVIC_DisableIRQ(USART2_IRQn);
-         
-         // Отправим валидный найденый пакет в UART
-         if(HAL_UART_Transmit_IT(&huart2, (u8*)g_CANInBuffer.GetPacketPtr(), g_CANInBuffer.GetPacketSize()) == HAL_OK)
-            g_bTransmitEnd = false;
-         
-         // Включим прерывания UART
-         NVIC_EnableIRQ(USART2_IRQn);            
-      }
-      g_CANInBuffer.ClosePacket();
-      
-      // Освобождение пакета
-      g_CAN.DeletePacket();
-   }
-}
-
-uint32_t g_Count = 0;
-/**
-   Обработка приходящих фреймов с CAN и складывание их в буфер для формирования целых пакетов
-   на входе    :  in_pCan  - указатель на структуру CAN
-   на выходе   :  *
-*/
-void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* in_pCan)
-{
-   can_frame_t l_Frame;
-
-   // Извлечение полезной информации
-   l_Frame.m_u32ExtID   = in_pCan->pRxMsg->ExtId;
-   l_Frame.m_u8Size     = in_pCan->pRxMsg->DLC;
-   
-   // Скопируем полезную нагрузку
-   memcpy(l_Frame.m_aData, in_pCan->pRxMsg->Data, l_Frame.m_u8Size);
-   
-   // Добавление полученого фрейма в буфер
-   g_CAN.AddFrame(&l_Frame);
-   
-   // Включим прерыване обратно
-   HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
-   
-   g_Count++;
+   return l_bResult;
 }
 
 /**
@@ -171,35 +232,177 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* in_pCan)
 */
 void HAL_CAN_TxCpltCallback(CAN_HandleTypeDef* in_pCan)
 {
-   //switch(in_pCan->ErrorCode)
-   //{
-   //case HAL_CAN_ERROR_NONE  : ERRORNo++;               break;//    0x00000000U    /*!< No error             */
-   //case HAL_CAN_ERROR_EWG   : ERROREWG++;              break;//    0x00000001U    /*!< EWG error            */
-   //case HAL_CAN_ERROR_EPV   : ERROREPV++;              break;//    0x00000002U    /*!< EPV error            */
-   //case HAL_CAN_ERROR_BOF   : ERRORBOF++;              break;//    0x00000004U    /*!< BOF error            */
-   //case HAL_CAN_ERROR_STF   : ERRORStuff++;            break;//    0x00000008U    /*!< Stuff error          */
-   //case HAL_CAN_ERROR_FOR   : ERRORForm++;             break;//    0x00000010U    /*!< Form error           */
-   //case HAL_CAN_ERROR_ACK   : ERRORAcknowledgment++; break;//    0x00000020U    /*!< Acknowledgment error */
-   //case HAL_CAN_ERROR_BR    : ERRORBit++;             break;//    0x00000040U    /*!< Bit recessive        */
-   //case HAL_CAN_ERROR_BD    : ERRORLEC++;             break;//    0x00000080U    /*!< LEC dominant         */
-   //case HAL_CAN_ERROR_CRC   : ERRORLECt++;             break;//    0x00000100U    /*!< LEC transfer error   */
-   //case HAL_CAN_ERROR_FOV0  : ERRORFIFO0++;           break;//    0x00000200U    /*!< FIFO0 overrun error  */
-   //case HAL_CAN_ERROR_FOV1  : ERRORFIFO1++;           break;//    0x00000400U    /*!< FIFO1 overrun error  */
-   //case HAL_CAN_ERROR_TXFAIL: ERRORTransmit++;       break;//    0x00000800U    /*!< Transmit failure     */
-   //}
+   // Проверка свободен ли UART
+   g_bCANTransmit = SendToCAN();
 }
 
+/**
+   Отправка данных из UART буфера в CAN порт
+   на входе    :  *
+   на выходе   :  *
+*/
+void UARTtoCAN()
+{
+   // Проверка свободен ли UART
+   if(!g_bCANTransmit)
+      g_bCANTransmit = SendToCAN();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+//
+// Работа с UART
+//
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 /**
    Обработчик получения одного байта из шины
    на входе    :  huart - указатель на хендлер UART
    на выходе   :  *
 */
-void  HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 {
-   g_UARTInBuffer.AddByte(g_aUartBuffer[0]);
-   HAL_UART_Receive_IT(huart, g_aUartBuffer, 1);
+   // Проверка режима работы
+   if(g_Spliter.m_bReadPacket)
+   {
+      // Проверка на экранирование символа
+      if(g_Spliter.m_u8Old == ESCAPE_MARKER)
+      {
+         // Если получен маркер конца
+         g_Spliter.m_aBuffer[g_Spliter.m_u8Index++] = g_u8UartByte;
+         g_u8UartByte = 0;
+
+         // Проверка на конец пакета
+      } else if(g_Spliter.m_u8Old == END_MARKER)
+      {
+         if(g_u8UartByte == END_MARKER && g_Spliter.m_u8Index)
+         {
+            // Найден конец пакета, вычисление суммы пакета
+            uint8_t l_u8LCR = 0;
+            for(size_t i = 0; i < g_Spliter.m_u8Index - 1; i++)
+               l_u8LCR += g_Spliter.m_aBuffer[i];
+
+            // Проверка суммы
+            if(g_Spliter.m_aBuffer[g_Spliter.m_u8Index - 1] == l_u8LCR)
+            {
+               can_frame_t l_Frame;
+               // Идентификатор пакета
+               l_Frame.m_u32ExtID = g_Spliter.m_aBuffer[3] << 24 | g_Spliter.m_aBuffer[2] << 16 | g_Spliter.m_aBuffer[1] << 8 | g_Spliter.m_aBuffer[0];
+               
+               // Размер данных
+               l_Frame.m_u8Size = g_Spliter.m_aBuffer[4];
+
+               // Получение данных пакета
+               for(size_t i = 0; i < 8; i++)
+                  l_Frame.m_aData[i] = g_Spliter.m_aBuffer[i + 5];
+               
+               g_u32UART_RCV++;
+               
+               // Добавление полученого фрейма в буфер
+               if(!g_UARTtoCAN.AddFrame(&l_Frame))
+                  g_u32UART_RCV_Error++;
+            }
+         }
+         // Переход в режим поиска начала пакета
+         g_Spliter.m_bReadPacket = false;
+         g_Spliter.m_u8Index = 0;
+
+      } else
+      {
+         // Проверка на начало пакета
+         if(g_u8UartByte == START_MARKER)
+         {
+            if(g_Spliter.m_u8Old != START_MARKER)
+            {
+               // Переход в режим поиска начала пакета
+               g_Spliter.m_bReadPacket = false;
+               g_Spliter.m_u8Index = 0;
+            }
+         } else if(g_u8UartByte != END_MARKER && g_u8UartByte != ESCAPE_MARKER)
+            g_Spliter.m_aBuffer[g_Spliter.m_u8Index++] = g_u8UartByte;
+      }
+
+   } else
+   {
+      // Поиск начала пакета
+      if(g_Spliter.m_u8Old == START_MARKER && g_u8UartByte == START_MARKER)
+      {
+         g_Spliter.m_bReadPacket = true;
+         g_Spliter.m_u8Index = 0;
+      }
+   }
+   // Сохраним последний полученый байт для анализа последующего байта
+   g_Spliter.m_u8Old = g_u8UartByte;
+   
+   HAL_UART_Receive_IT(huart, &g_u8UartByte, 1);
 }
 
+/**
+   Получение фреймов и отправка их в CAN
+   на входе    :  *
+   на выходе   :  *
+*/
+static bool SendToUART()
+{
+   bool    l_bResult = false;
+   uint8_t l_aTemp[32];
+   
+   can_frame_t* l_pFrame = g_CANtoUART.GetFrame();
+   if(l_pFrame)
+   {
+      // Сериализация пакета
+      uint8_t* l_pPtr = l_aTemp;
+      uint32_t l_u32ID = l_pFrame->m_u32ExtID;
+      uint8_t l_u8LRC = 0;
+      
+      // Добавление ID
+      *l_pPtr++ = l_u32ID & 0xFF;
+      l_u32ID >>= 8;
+      *l_pPtr++ = l_u32ID & 0xFF;
+      l_u32ID >>= 8;
+      *l_pPtr++ = l_u32ID & 0xFF;
+      l_u32ID >>= 8;
+      *l_pPtr++ = l_u32ID & 0xFF;
+      
+      // Добавление размера полезной нагрузки
+      *l_pPtr++ = l_pFrame->m_u8Size;
+      
+      // Добавление данных
+      for(size_t i = 0; i < 8; i++)
+         *l_pPtr++ = l_pFrame->m_aData[i];
+
+      for(size_t i = 0; i < 13; i++)
+         l_u8LRC += l_aTemp[i];
+      *l_pPtr++ = l_u8LRC;
+
+      // Сериализация данных с экранированием
+      l_pPtr = g_aBuffer;
+      *l_pPtr++ = START_MARKER;
+      *l_pPtr++ = START_MARKER;
+
+      for(size_t i = 0; i < 14; i++)
+      {
+         if(l_aTemp[i] == START_MARKER || l_aTemp[i] == END_MARKER || l_aTemp[i] == ESCAPE_MARKER)
+            *l_pPtr++ = ESCAPE_MARKER;
+
+         *l_pPtr++ = l_aTemp[i];
+      }
+
+      *l_pPtr++ = END_MARKER;
+      *l_pPtr++ = END_MARKER;
+
+      g_u32UART_SND++;
+      
+      // Отправим валидный найденый пакет в UART
+      if(HAL_UART_Transmit_IT(&huart2, g_aBuffer, l_pPtr - g_aBuffer) == HAL_OK)
+      {
+         g_CANtoUART.SkipFrame();
+         l_bResult = true;
+      } else
+         g_u32UART_SND_Error++;
+   }
+   return l_bResult;
+}
 
 /**
    Обработчик окончания передачи 
@@ -208,7 +411,19 @@ void  HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
-   g_bTransmitEnd = true;
+   g_bUARTTransmit = SendToUART();
+}
+
+/**
+   Отправка данных из CAN буфера в UART порт
+   на входе    :  *
+   на выходе   :  *
+*/
+void CANtoUART()
+{
+   // Проверка свободен ли UART
+   if(!g_bUARTTransmit)
+      g_bUARTTransmit = SendToUART();
 }
 
 /**
@@ -223,58 +438,27 @@ void iRidiumDevice_Setup(void)
    hcan.pRxMsg = &g_aCanRxMessage;
    
    // Инициализация фильтра CAN FIFO 0
-	CAN_FilterConfTypeDef CAN_FilterFIFO0;
-	CAN_FilterFIFO0.FilterNumber = 1;
-	CAN_FilterFIFO0.FilterMode = CAN_FILTERMODE_IDMASK;
-	CAN_FilterFIFO0.FilterScale = CAN_FILTERSCALE_32BIT;
-	CAN_FilterFIFO0.FilterIdHigh = 0x0000;
-	CAN_FilterFIFO0.FilterIdLow = 0x0000;
-	CAN_FilterFIFO0.FilterMaskIdHigh = 0x0000;
-	CAN_FilterFIFO0.FilterMaskIdLow = 0x0000;
-	CAN_FilterFIFO0.FilterFIFOAssignment = CAN_FIFO0;
-	CAN_FilterFIFO0.FilterActivation = ENABLE;
+   CAN_FilterConfTypeDef CAN_FilterFIFO0;
+   CAN_FilterFIFO0.FilterNumber = 1;
+   CAN_FilterFIFO0.FilterMode = CAN_FILTERMODE_IDMASK;
+   CAN_FilterFIFO0.FilterScale = CAN_FILTERSCALE_32BIT;
+   CAN_FilterFIFO0.FilterIdHigh = 0x0000;
+   CAN_FilterFIFO0.FilterIdLow = 0x0000;
+   CAN_FilterFIFO0.FilterMaskIdHigh = 0x0000;
+   CAN_FilterFIFO0.FilterMaskIdLow = 0x0000;
+   CAN_FilterFIFO0.FilterFIFOAssignment = CAN_FIFO0;
+   CAN_FilterFIFO0.FilterActivation = ENABLE;
 
    HAL_CAN_ConfigFilter(&hcan, &CAN_FilterFIFO0);
 
    // Включаем прерывания на прием
    HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
    
-   g_CAN.SetInBuffer(g_aFromCan, sizeof(g_aFromCan));
-   g_CAN.SetOutBuffer(g_aFromUart, sizeof(g_aFromUart));
-  
-   // Инициализируем буфер UART
-   g_UARTInBuffer.SetBuffer(g_aUARTInBuffer, sizeof(g_aUARTInBuffer));
-   g_UARTInBuffer.Clear();
+   g_CANtoUART.SetBuffer(g_aCANtoUART, sizeof(g_aCANtoUART));
+   g_UARTtoCAN.SetBuffer(g_aUARTtoCAN, sizeof(g_aUARTtoCAN));
    
-   // Инициализируем буфер CAN
-   g_CANInBuffer.SetBuffer(g_aCANInBuffer, sizeof(g_aCANInBuffer));
-   g_CANInBuffer.Clear();
-   
-   // Для формирования уникального идентификатора
-   char l_szHexTab[] = "0123456789ABCDEF";
-
-   // Получим указатель на уникальный идентификатор STM32
-   u8* l_pSrc = (u8*)UID_BASE;
-   char* l_pDst = g_pszHWID;
-   
-   // Сформируем HEX data
-   for(size_t i = 0; i < 12; i++)
-   {
-      u8 l_u8Byte = *l_pSrc++;
-      *l_pDst++ = l_szHexTab[l_u8Byte >> 4];
-      *l_pDst++ = l_szHexTab[l_u8Byte & 0xF];
-   }
-   *l_pDst = 0;
-   
-   // Сформируем на основании HWID и запомним уникальный идентификатор устройства для формирования фреймов
-   g_u16CanID = GetCRC16Modbus(1, (u8*)g_pszHWID, sizeof(g_pszHWID));
-   
-   g_CAN.SetCANID(g_u16CanID);
-   g_CAN.SetTID(0);
-   g_CAN.SetAddress(0);
-
    // Включим прерывание получения данных из UART
-   HAL_UART_Receive_IT(&huart2, g_aUartBuffer, sizeof(g_aUartBuffer));
+   HAL_UART_Receive_IT(&huart2, &g_u8UartByte, 1);
 }
 
 /**
@@ -294,15 +478,8 @@ void iRidiumDevice_Loop(void)
       // Попытаемся установить возможность приема
       HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
    }
-   
-   // Обработаем буфер из уарта
-   if(g_UARTInBuffer.Size())
-      FindPacketsToCan();
-   // Обработаем буфер на отправку в CAN
-   if(g_CAN.GetFrame())
-      SendPacketsToCan();
-   
-   // Обработаем буфер из CAN если есть данные
-   if(g_bTransmitEnd && (HAL_UART_GetState(&huart2) & HAL_UART_STATE_READY) == HAL_UART_STATE_READY)
-      FindAndSendToUart();
+   // Отправка данных из CAN в UART
+   CANtoUART();
+   // Отправка данных из UART в CAN
+   UARTtoCAN();
 }

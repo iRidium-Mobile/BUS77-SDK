@@ -16,10 +16,9 @@
 // Включения
 #include "CIridiumBusOutBuffer.h"
 
-#include "CalcParity.h"
 #include "IridiumBus.h"
 #include "CIridiumCipher.h"
-#include "Bytes.h"
+#include "IridiumBytes.h"
 #include "IridiumCRC16.h"
 
 /**
@@ -74,39 +73,43 @@ bool CIridiumBusOutBuffer::End(iridium_packet_header_t& in_rHeader)
    // Проверка размера буфера
    if(l_stSize)
    {
-      // Расчет и добавление CRC8
-      m_pPtr = WriteU16LE(m_pPtr, GetCRC16Modbus(0xFFFF, l_pPtr, l_stSize));
+      // Расчет и добавление CRC16
+      u16 l_u16CRC = GetCRC16Modbus(0xFFFF, l_pPtr, l_stSize);
+      m_pPtr = WriteLE(m_pPtr, &l_u16CRC, 2);
       l_stSize += 2;
       
       // Вычисление размера заголовка
-      l_pPtr -= IRIDIUM_BUS_MIN_HEADER_SIZE;
-      l_pPtr -= in_rHeader.m_Flags.m_bSegment ? 2 : 0;
-      l_pPtr -= in_rHeader.m_Flags.m_bAddress ? 2 : 0;
+      size_t l_stLen = 1;
+      if(in_rHeader.m_Flags.m_bSegment)
+         l_stLen <<= 1;
+      if(in_rHeader.m_Flags.m_bAddress)
+         l_stLen <<= 1;
+      l_pPtr -= (l_stLen + IRIDIUM_BUS_MIN_HEADER_SIZE);
 
       // Сформируем указатель на пакет
       m_pPacket = l_pPtr;
-         
-      // Вычисление четности
-      l_bResult = GetParity(l_stSize);
 
       // Запись маркера и списка флагов
-      l_pPtr = WriteU8(l_pPtr, in_rHeader.m_u8Type | in_rHeader.m_Flags.m_bAddress << 3 | in_rHeader.m_Flags.m_bPriority << 7) ;
-      l_pPtr = WriteU8(l_pPtr, l_bResult << 7  | in_rHeader.m_Flags.m_bSegment << 6 | in_rHeader.m_Flags.m_u2Version << 3 | in_rHeader.m_Flags.m_u3Crypt);
+      l_pPtr = WriteByte(l_pPtr, in_rHeader.m_u8Type | in_rHeader.m_Flags.m_bAddress << 3 | in_rHeader.m_Flags.m_bPriority << 7) ;
+      l_pPtr = WriteByte(l_pPtr, in_rHeader.m_Flags.m_bSegment << 6 | in_rHeader.m_Flags.m_u2Version << 3 | in_rHeader.m_Flags.m_u3Crypt);
 
       // Запись длины тела сообщения
-      l_pPtr = WriteU8(l_pPtr, l_stSize);
+      l_pPtr = WriteByte(l_pPtr, l_stSize);
 
-      // Запись сегмента
+      // Запись сегмента источника, если сегмент указан
       if(in_rHeader.m_Flags.m_bSegment)
-      {
-         l_pPtr = WriteU8(l_pPtr, in_rHeader.m_SrcAddr >> 8);
-         l_pPtr = WriteU8(l_pPtr, in_rHeader.m_DstAddr >> 8);
-      }
-      // Запись адреса
+         l_pPtr = WriteByte(l_pPtr, in_rHeader.m_SrcAddr >> 8);
+      // Запись адреса источника
+      l_pPtr = WriteByte(l_pPtr, in_rHeader.m_SrcAddr);
+
+      // Запись данных приемника
       if(in_rHeader.m_Flags.m_bAddress)
       {
-         l_pPtr = WriteU8(l_pPtr, in_rHeader.m_SrcAddr);
-         l_pPtr = WriteU8(l_pPtr, in_rHeader.m_DstAddr);
+         // Запись сегмента приемника, если сегмент указан
+         if(in_rHeader.m_Flags.m_bSegment)
+            l_pPtr = WriteByte(l_pPtr, in_rHeader.m_DstAddr >> 8);
+         // Запись адреса приемника
+         l_pPtr = WriteByte(l_pPtr, in_rHeader.m_DstAddr);
       }
       l_bResult = true;
    }

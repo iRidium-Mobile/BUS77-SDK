@@ -25,7 +25,7 @@
 #include "CIridiumCipher.h"
 
 // The S-Box from section 5.1.1
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 #include <avr/pgmspace.h>
 
 const static u8 g_aGrasshoperPI[256] PROGMEM =
@@ -68,7 +68,7 @@ const static u8 g_aGrasshoperPI[256] =
 };
 
 // Inverse S-Box
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 const static u8 g_aGrasshopperPIInv[256] PROGMEM =
 #else
 const static u8 g_aGrasshopperPIInv[256] =
@@ -109,7 +109,7 @@ const static u8 g_aGrasshopperPIInv[256] =
 };
 
 // Linear vector from sect 5.1.2
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 const static u8 g_aGrasshopperLVec[16] PROGMEM =
 #else
 const static u8 g_aGrasshopperLVec[16] =
@@ -120,11 +120,11 @@ const static u8 g_aGrasshopperLVec[16] =
 };
 
 // Настройка в зависимости от платформы
-#if defined(IRIDIUM_AVR_PLATFORM)
+#if defined(IRIDIUM_MCU_AVR)
 #define BITS         8                             // Оптимизация под 8 битный процессор
 #define USE_TABLES   0                             // Для экономии памяти, таблицы не используются
 
-#elif defined(IRIDIUM_CORTEX_M_PLATFORM)
+#elif defined(IRIDIUM_MCU_CORTEX_M)
 #define BITS         32                            // Оптимизация под 32 битный процессор
 #define USE_TABLES   0                             // Для экономии памяти, таблицы не используются
 

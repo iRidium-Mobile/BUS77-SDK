@@ -14,7 +14,7 @@
  *    Марат Гилязетдинов, Сергей Королёв  - первая версия
  *******************************************************************************/
 #include "CIridiumBusProtocol.h"
-#include "Bytes.h"
+#include "IridiumBytes.h"
 #include "IridiumCRC16.h"
 #include <stdlib.h>
 
@@ -25,12 +25,9 @@
 CIridiumBusProtocol::CIridiumBusProtocol() : CIridiumProtocol()
 {
    // Подготовка входящего буфера
-   m_InBuffer.Clear();
-   m_MessageBuffer.Clear();
    m_pInMessage = &m_MessageBuffer;
 
    // Подготовка исходящего буфера
-   m_OutBuffer.Clear();
    m_pOutMessage = &m_OutBuffer;
 
    // Сброс данных
@@ -45,9 +42,6 @@ CIridiumBusProtocol::CIridiumBusProtocol() : CIridiumProtocol()
    m_OutPH.m_Flags.m_u3Crypt     = IRIDIUM_CRYPTION_NONE;
    m_OutPH.m_SrcAddr             = 0;
    m_OutPH.m_DstAddr             = 0;
-
-   // Сброс идентификатора транзакции
-   m_u16TID = 0;
 }
 
 /**
@@ -69,7 +63,7 @@ void CIridiumBusProtocol::Reset()
 
    // Очистка потоков
    m_InBuffer.Clear();
-   m_MessageBuffer.Clear();
+   m_MessageBuffer.Reset();
    m_OutBuffer.Clear();
 
 #if defined(IRIDIUM_ENABLE_CIPHER)
@@ -89,20 +83,8 @@ void CIridiumBusProtocol::Reset()
 */
 bool CIridiumBusProtocol::SendSearchRequest(iridium_address_t in_DstAddr, u8 in_u8Mask)
 {
-   // Заполнение заголовка пакета
-   m_OutPH.m_Flags.m_bSegment    = (0 != (in_DstAddr & 0xFF00));
-   m_OutPH.m_DstAddr             = in_DstAddr & ~0xFF;
-   m_OutPH.m_Flags.m_bAddress    = false;
-
-   // Заполнение заголовка сообщения
-   m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
-   m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
-   m_OutMH.m_Flags.m_bNoTID      = false;
-   m_OutMH.m_Flags.m_bEnd        = true;
-   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SYSTEM_SEARCH);
-   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SYSTEM_SEARCH;
-   m_OutMH.m_u16TID              = GetTID();
-
+   // Инициализация широковещательного запроса
+   InitRequestPacket(true, in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_SEARCH);
    // Начало работы с пакетом
    Begin();
    // Добавление маски поиска
@@ -126,19 +108,9 @@ bool CIridiumBusProtocol::SendSearchRequest(iridium_address_t in_DstAddr, u8 in_
 */
 bool CIridiumBusProtocol::SendSetLIDRequest(iridium_address_t in_DstAddr, const char* in_pszHWID, u8 in_u8LID, u32 in_u32PIN)
 {
-   // Заполнение заголовка пакета
-   m_OutPH.m_Flags.m_bSegment    = (0 != (in_DstAddr & 0xFF00));
-   m_OutPH.m_DstAddr             = in_DstAddr & ~0xFF;
-   m_OutPH.m_Flags.m_bAddress    = false;
-
-   // Заполнение заголовка сообщения
-   m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
-   m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
+   // Инициализация широковещательного запроса
+   InitRequestPacket(true, in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_SET_LID);
    m_OutMH.m_Flags.m_bNoTID      = true;
-   m_OutMH.m_Flags.m_bEnd        = true;
-   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SYSTEM_SET_LID);
-   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SYSTEM_SET_LID;
-   m_OutMH.m_u16TID              = GetTID();
 
    // Начало работы с пакетом
    Begin();
@@ -156,18 +128,19 @@ bool CIridiumBusProtocol::SendSetLIDRequest(iridium_address_t in_DstAddr, const 
 
 /**
    Инициализация данных пакета
-   на входе    :  in_DstAddr  - адрес получателя
-                  in_u8Type   - тип сообщения
+   на входе    :  in_bBroadcast  - признак широковещательного пакета
+                  in_DstAddr     - адрес получателя
+                  in_u8Type      - тип сообщения
    на выходе   :  *
    примечание  :  данная процедура нужна для уменьшения размера исполняемого кода
 */
-void CIridiumBusProtocol::InitRequestPacket(iridium_address_t in_DstAddr, u8 in_u8Type)
+void CIridiumBusProtocol::InitRequestPacket(bool in_bBrodcast, iridium_address_t in_DstAddr, u8 in_u8Type)
 {
    // Заполнение заголовка пакета
    m_OutPH.m_Flags.m_bSegment    = (0 != (in_DstAddr & 0xFF00));
-   m_OutPH.m_DstAddr             = in_DstAddr;
-   m_OutPH.m_Flags.m_bAddress    = true;
+   m_OutPH.m_Flags.m_bAddress    = (false == in_bBrodcast);
    m_OutPH.m_SrcAddr             = m_Address;
+   m_OutPH.m_DstAddr             = in_DstAddr;
 
    // Заполнение заголовка сообщения
    m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
@@ -189,9 +162,9 @@ void CIridiumBusProtocol::InitResponsePacket()
 {
    // Заполнение заголовка пакета
    m_OutPH.m_Flags.m_bSegment    = m_pInPH->m_Flags.m_bSegment;
-   m_OutPH.m_DstAddr             = m_pInPH->m_SrcAddr;
    m_OutPH.m_Flags.m_bAddress    = true;
    m_OutPH.m_SrcAddr             = m_Address;
+   m_OutPH.m_DstAddr             = m_pInPH->m_SrcAddr;
 
    // Заполнение заголовка сообщения
    m_OutMH.m_Flags.m_bDirection  = IRIDIUM_RESPONSE;
@@ -254,12 +227,14 @@ bool CIridiumBusProtocol::EncodeMessage(u8* in_pBuffer, size_t in_stSize, size_t
       // Добавление заголовка в тело 
       if(m_pCipher->GetBlockSize())
       {
+         u16 l_u16CRC = 0;
          // Запись размера зашифрованного сообщения 
-         WriteU8(in_pBuffer + IRIDIUM_BUS_CIPHER_SIZE_OFFSET, (u8)in_stSize - IRIDIUM_BUS_CIPHER_HEADER_SIZE);
+         WriteByte(in_pBuffer + IRIDIUM_BUS_CIPHER_SIZE_OFFSET, (u8)in_stSize - IRIDIUM_BUS_CIPHER_HEADER_SIZE);
          // Добавление случайного числа
-         WriteU8(in_pBuffer + IRIDIUM_BUS_CIPHER_RAND_OFFSET, m_u8Count++);
-         // Вычисление и добавление CRC8 для зашифрованного сообщения
-         WriteU16LE(in_pBuffer + IRIDIUM_BUS_CIPHER_CRC_OFFSET, GetCRC16Modbus(0xFFFF, in_pBuffer + IRIDIUM_BUS_CIPHER_SIZE_OFFSET, (u8)in_stSize - IRIDIUM_BUS_CIPHER_CRC_SIZE));
+         WriteByte(in_pBuffer + IRIDIUM_BUS_CIPHER_RAND_OFFSET, m_u8Count++);
+         // Вычисление и добавление CRC16 для зашифрованного сообщения
+         l_u16CRC = GetCRC16Modbus(0xFFFF, in_pBuffer + IRIDIUM_BUS_CIPHER_SIZE_OFFSET, (u8)in_stSize - IRIDIUM_BUS_CIPHER_CRC_SIZE);
+         WriteLE(in_pBuffer + IRIDIUM_BUS_CIPHER_CRC_OFFSET, &l_u16CRC, 2);
       }
 
       // Шифрование тела сообщения
@@ -297,8 +272,8 @@ bool CIridiumBusProtocol::DecodeMessage(u8 in_u8Crypt, u8*& out_rBuffer, size_t&
 
             // Чтение CRC16 и размера данных
             u8* l_pPtr = out_rBuffer;
-            ReadU16LE(l_pPtr + IRIDIUM_BUS_CIPHER_CRC_OFFSET, l_u16CRC);
-            ReadU8(l_pPtr + IRIDIUM_BUS_CIPHER_SIZE_OFFSET, l_u8Size);
+            ReadLE(l_pPtr + IRIDIUM_BUS_CIPHER_CRC_OFFSET, &l_u16CRC, 2);
+            ReadByte(l_pPtr + IRIDIUM_BUS_CIPHER_SIZE_OFFSET, l_u8Size);
 
             // Проверка правильности декодирования
             if(l_u16CRC == GetCRC16Modbus(0xFFFF, l_pPtr + IRIDIUM_BUS_CIPHER_SIZE_OFFSET, l_u8Size + (IRIDIUM_BUS_CIPHER_HEADER_SIZE - IRIDIUM_BUS_CIPHER_CRC_SIZE)))
