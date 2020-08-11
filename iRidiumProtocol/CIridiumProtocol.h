@@ -380,7 +380,6 @@ public:
       { return 0; }
    virtual size_t GetTagIndex(u32 in_u32TagID)
       { return ~0; }
-      //{ return (size_t)~0; }
    virtual void SetTagData(iridium_tag_info_t& in_rInfo)
       { }
    virtual size_t GetTagData(size_t in_stIndex, iridium_tag_info_t& out_rInfo, size_t in_stSize)
@@ -398,7 +397,7 @@ public:
    virtual size_t GetChannels()
       { return 0; }
    virtual size_t GetChannelIndex(u32 in_u32ChannelID)
-      { return ~0; }//(size_t)-1; }
+      { return ~0; }
    virtual void SetChannelData(iridium_channel_info_t& in_rInfo)
       { }
    virtual size_t GetChannelData(size_t in_stIndex, iridium_channel_info_t& out_rInfo)
@@ -442,7 +441,6 @@ protected:
       { return m_pInPH->m_DstAddr; }
 
 protected:
-   bool                       m_bEnableLongString; // Флаг блокирующий длинные строки
    u16                        m_u16TID;            // Текущий идентификатор транзакции
    iridium_address_t          m_Address;           // Собственный адрес
    eIridiumError              m_eError;            // Код ошибки при обработке входящего сообщения

@@ -55,7 +55,6 @@ CIridiumProtocol::~CIridiumProtocol()
 */
 void CIridiumProtocol::Reset()
 {
-   m_bEnableLongString = false;
    m_u16TID = 0;
 }
 
@@ -169,23 +168,6 @@ bool CIridiumProtocol::SendSearchResponse(u16 in_u16TID, iridium_search_info_t& 
    m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SYSTEM_SEARCH);
    m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SYSTEM_SEARCH;
    m_OutMH.m_u16TID              = in_u16TID;
-
-/*
-   // Заполнение заголовка пакета
-   m_OutPH.m_Flags.m_bSegment    = m_pInPH->m_Flags.m_bSegment;
-   m_OutPH.m_Flags.m_bAddress    = true;
-   m_OutPH.m_SrcAddr             = m_Address;
-   m_OutPH.m_DstAddr             = m_pInPH->m_Flags.m_bAddress ? m_pInPH->m_SrcAddr : 0;
-
-   // Заполнение заголовка сообщения
-   m_OutMH.m_Flags.m_bDirection  = IRIDIUM_RESPONSE;
-   m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
-   m_OutMH.m_Flags.m_bNoTID      = (0 == in_u16TID);
-   m_OutMH.m_Flags.m_bEnd        = true;
-   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SYSTEM_SEARCH);
-   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SYSTEM_SEARCH;
-   m_OutMH.m_u16TID              = in_u16TID;
-*/
    // Начало работы с пакетом
    Begin();
    // Добавление информации об устройстве в поток
@@ -612,23 +594,13 @@ void CIridiumProtocol::ReceiveGetVariableRequest()
 */
 bool CIridiumProtocol::SendGetVariableResponse(u16 in_u16Variable, u8 in_u8Type, universal_value_t& in_rValue)
 {
-   size_t l_stPosition = ~0;//(size_t)-1;
+   size_t l_stPosition = ~0;
 
    // Инициализация пакета ответа
    InitResponsePacket();
 
    // Заполнение заголовка пакета
-   m_OutPH.m_Flags.m_bAddress    = false; // ответ всегда широковещательный
-/*
-   // Заполнение заголовка сообщения
-   m_OutMH.m_Flags.m_bDirection  = IRIDIUM_RESPONSE;
-   m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
-   m_OutMH.m_Flags.m_bNoTID      = false;
-   m_OutMH.m_Flags.m_bEnd        = true;
-   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_GET_VARIABLE);
-   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_GET_VARIABLE;
-   m_OutMH.m_u16TID              = m_InMH.m_u16TID;
-*/
+   m_OutPH.m_Flags.m_bAddress = false;
    // Начало работы с пакетом
    Begin();
    // Добавление идентификатора глобальной переменной

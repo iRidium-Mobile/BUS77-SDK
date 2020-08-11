@@ -45,7 +45,6 @@ enum eIridiumValueType
 // Универсальный тип
 typedef union universal_value_s
 {
-   u64            m_u64Value;                      // IVT_U64 примечение: данный тип расположен здесь, для обеспечения статической инициализации. Если перенести, не будет работать правильно
    bool           m_bValue;                        // IVT_BOOL
    u8             m_u8Value;                       // IVT_U8
    s8             m_s8Value;                       // IVT_S8
@@ -54,6 +53,7 @@ typedef union universal_value_s
    u32            m_u32Value;                      // IVT_U32
    s32            m_s32Value;                      // IVT_S32
    f32            m_f32Value;                      // IVT_F32
+   u64            m_u64Value;                      // IVT_U64
    s64            m_s64Value;                      // IVT_S64
    f64            m_f64Value;                      // IVT_F64
    iridium_time_t m_Time;                          // IVT_TIME
