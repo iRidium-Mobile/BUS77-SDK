@@ -20,6 +20,7 @@ CCANPort::CCANPort()
 
 /**
    Деструктор класса
+   
 */
 CCANPort::~CCANPort()
 {
