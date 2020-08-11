@@ -64,11 +64,8 @@ static void MX_CAN_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
-
 /* USER CODE END PFP */
-
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
