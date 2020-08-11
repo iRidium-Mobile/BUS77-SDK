@@ -137,9 +137,8 @@ bool CCANPort::AddPacket(bool in_bBroadcast, u8 in_u8Address, void* in_pBuffer, 
       m_OutBuffer.m_stCount += l_u8Frames;
       l_bResult = true;
    } else
-   {
       l_bResult = false;
-   }
+   
    return l_bResult;
 }
 
