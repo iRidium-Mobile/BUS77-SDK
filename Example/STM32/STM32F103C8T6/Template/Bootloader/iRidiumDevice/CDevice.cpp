@@ -359,6 +359,7 @@ CDevice::CDevice() : CIridiumBusProtocol()
 */
 CDevice::~CDevice()
 {
+	
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -625,6 +626,7 @@ size_t CDevice::StreamBlock(u8 in_u8StreamID, u8 in_u8BlockID, size_t in_stSize,
 */
 void CDevice::StreamBlockResult(u8 in_u8StreamID, u8 in_u8BlockID, size_t in_stSize)
 {
+	
 }
 
 /**
