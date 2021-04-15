@@ -124,6 +124,7 @@ bool CRingBuffer::AddFrame(can_frame_t* in_pFrame)
    return l_bResult;
 }
 
+// Сбросить кадр
 void CRingBuffer::SkipFrame()
 {
    if(m_stSize)
@@ -133,7 +134,7 @@ void CRingBuffer::SkipFrame()
    }
 }
 
-// Получение CAN фрейма
+// Получение CAN кадра
 can_frame_t* CRingBuffer::GetFrame()
 {
    can_frame_t* l_pResult = NULL;
