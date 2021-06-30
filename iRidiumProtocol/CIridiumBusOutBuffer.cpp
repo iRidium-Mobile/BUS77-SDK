@@ -77,40 +77,48 @@ bool CIridiumBusOutBuffer::End(iridium_packet_header_t& in_rHeader)
       u16 l_u16CRC = GetCRC16Modbus(0xFFFF, l_pPtr, l_stSize);
       m_pPtr = WriteLE(m_pPtr, &l_u16CRC, 2);
       l_stSize += 2;
+
+      // Проверка наличия маршрута
+      bool l_bRoute = (0 != in_rHeader.m_u8Route & 0x7F);
       
       // Вычисление размера заголовка
       size_t l_stLen = 1;
-      if(in_rHeader.m_Flags.m_bSegment)
-         l_stLen <<= 1;
+      if(l_bRoute)
+         l_stLen++;
+      if(in_rHeader.m_Flags.m_bSrcSeg)
+         l_stLen++;
+      if(in_rHeader.m_Flags.m_bDstSeg)
+         l_stLen++;
       if(in_rHeader.m_Flags.m_bAddress)
-         l_stLen <<= 1;
+         l_stLen++;
       l_pPtr -= (l_stLen + IRIDIUM_BUS_MIN_HEADER_SIZE);
 
       // Сформируем указатель на пакет
       m_pPacket = l_pPtr;
 
       // Запись маркера и списка флагов
-      l_pPtr = WriteByte(l_pPtr, in_rHeader.m_u8Type | in_rHeader.m_Flags.m_bAddress << 3 | in_rHeader.m_Flags.m_bPriority << 7) ;
-      l_pPtr = WriteByte(l_pPtr, in_rHeader.m_Flags.m_bSegment << 6 | in_rHeader.m_Flags.m_u2Version << 3 | in_rHeader.m_Flags.m_u3Crypt);
+      l_pPtr = WriteByte(l_pPtr, in_rHeader.m_u8Type | in_rHeader.m_Flags.m_bAddress << 3 | in_rHeader.m_Flags.m_bPriority << 7);
+      l_pPtr = WriteByte(l_pPtr, l_bRoute << 7 | in_rHeader.m_Flags.m_bSrcSeg << 6 | in_rHeader.m_Flags.m_bDstSeg << 5 | in_rHeader.m_Flags.m_u2Version << 3 | in_rHeader.m_Flags.m_u3Crypt);
 
       // Запись длины тела сообщения
       l_pPtr = WriteByte(l_pPtr, l_stSize);
 
+      // Запись маршрута
+      if(l_bRoute)
+         l_pPtr = WriteByte(l_pPtr, in_rHeader.m_u8Route);
+
       // Запись сегмента источника, если сегмент указан
-      if(in_rHeader.m_Flags.m_bSegment)
+      if(in_rHeader.m_Flags.m_bSrcSeg)
          l_pPtr = WriteByte(l_pPtr, in_rHeader.m_SrcAddr >> 8);
       // Запись адреса источника
       l_pPtr = WriteByte(l_pPtr, in_rHeader.m_SrcAddr);
 
+      // Запись сегмента приемника, если сегмент указан
+      if(in_rHeader.m_Flags.m_bDstSeg)
+         l_pPtr = WriteByte(l_pPtr, in_rHeader.m_DstAddr >> 8);
       // Запись данных приемника
       if(in_rHeader.m_Flags.m_bAddress)
-      {
-         // Запись сегмента приемника, если сегмент указан
-         if(in_rHeader.m_Flags.m_bSegment)
-            l_pPtr = WriteByte(l_pPtr, in_rHeader.m_DstAddr >> 8);
-         // Запись адреса приемника
          l_pPtr = WriteByte(l_pPtr, in_rHeader.m_DstAddr);
-      }
       l_bResult = true;
    }
    return l_bResult;

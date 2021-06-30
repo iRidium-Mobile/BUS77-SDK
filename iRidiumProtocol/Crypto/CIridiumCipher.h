@@ -18,7 +18,6 @@
 
 #include "IridiumTypes.h"
 #include "Iridium.h"
-#include "IridiumConfig.h"
 
 // Идентификаторы шифрования
 #define IRIDIUM_CRYPTION_NONE          0           // Шифрование отсутствует

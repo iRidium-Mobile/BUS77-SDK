@@ -94,6 +94,14 @@ void CIridiumOutBuffer::AddSearchInfo(iridium_search_info_t& in_rInfo)
    // Добавление HWID
    AddString(in_rInfo.m_pszHWID);
 #endif
+   // Добавление события
+   AddU8(in_rInfo.m_u8Event);
+   // Добавление списка флагов
+   AddU8(in_rInfo.m_u8Flags);
+   // Добавление пользовательского идентификатора
+   AddU32LE(in_rInfo.m_u32UserID);
+   // Добавление версии изменения
+   AddU16LE(in_rInfo.m_u16Change);
 }
 
 /**
@@ -143,11 +151,13 @@ void CIridiumOutBuffer::AddDeviceInfo(iridium_device_info_t& in_rInfo)
    AddU8(in_rInfo.m_u8Processor);
    AddU8(in_rInfo.m_u8OS);
    AddU8(in_rInfo.m_u8Flags);
-   AddU8(in_rInfo.m_u8FirmwareID);
-   AddData(in_rInfo.m_aVersion, 3);
+   AddU16LE(in_rInfo.m_u16FirmwareID);
+   AddData(in_rInfo.m_aVersion, sizeof(in_rInfo.m_aVersion));
    // Добавление количества каналов управления и обратной связи
    AddU32LE(in_rInfo.m_u32Channels);
    AddU32LE(in_rInfo.m_u32Tags);
+   AddU32LE(in_rInfo.m_u32UserID);
+   AddU16LE(in_rInfo.m_u16Change);
 }
 
 /**
@@ -389,6 +399,14 @@ void CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
          SetError();
          break;
       }
+
+      // Добавление единиц измерения
+      if(in_rDesc.m_u16Units)
+      {
+         l_u8Flag |= (1 << 4);
+         AddU16LE(in_rDesc.m_u16Units);
+      }
+
       // Запишем значение типа
       l_u8Type |= l_u8Flag;
       SetAnchorLE(l_pAnchor, &l_u8Type, 1);
@@ -415,6 +433,7 @@ void CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
 void CIridiumOutBuffer::AddTagDescription(iridium_tag_description_t& in_rDesc)
 {
    u8 l_u8Temp = 0;
+   //u16 l_u16Temp = 0;
    // Добавление общего описания канала
    AddDescription(in_rDesc.m_ID);
    // Выставим флаг владения каналом обратной связи списком глобальных переменных
@@ -435,6 +454,7 @@ void CIridiumOutBuffer::AddTagDescription(iridium_tag_description_t& in_rDesc)
 void CIridiumOutBuffer::AddChannelDescription(iridium_channel_description_t& in_rDesc)
 {
    u8 l_u8Temp = 0;
+   //u16 l_u16Temp = 0;
    // Добавление общего описания канала
    AddDescription(in_rDesc.m_ID);
    // Выставим флаг наличия глобальной переменной
@@ -457,12 +477,23 @@ void CIridiumOutBuffer::AddChannelDescription(iridium_channel_description_t& in_
    // Добавление списка глобальных переменных
    for(u8 i = 0; i < in_rDesc.m_u8Variables; i++)
    {
+      // Проверка наличия переменной
       if(in_rDesc.m_pVariables[i])
       {
-         AddU16LE(in_rDesc.m_pVariables[i]);
-         l_u8Temp++;
+         // Проверка количества переменных
+         if(l_u8Temp < in_rDesc.m_u8MaxVariables)
+         {
+            // Добавление переменной
+            AddU16LE(in_rDesc.m_pVariables[i]);
+            l_u8Temp++;
+
+         } else
+            break;
       }
    }
+   // Добавление количества переменных канала
+   if(l_u8Temp)
+      l_u8Temp = 0x80 | ((l_u8Temp - 1) & 0x1F);
    // Запишем количество глобальных переменных связзанных с каналом управления
    SetAnchorLE(l_pAnchor, &l_u8Temp, 1);
 }

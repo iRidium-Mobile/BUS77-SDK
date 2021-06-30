@@ -20,8 +20,6 @@
    https://github.com/MaXaMaR/kuznezhik
 */
 #include "CIridiumCipherGrasshopper.h"
-#include "time.h"
-#include "IridiumBytes.h"
 
 #define ACCESS_128_VALUE_8(key, part) (key->m_au8[part])
 #define ACCESS_128_VALUE_16(key, part) (key->m_au16[part])
@@ -100,7 +98,14 @@ void convert128(block_128_bit_t* in_pDst, const u8* in_pArray)
 #endif
 }
 
-#if(USE_TABLES)
+#if USE_TABLES == 1
+
+// Флаг инициализации таблиц
+bool             CIridiumCipherGrasshopper::m_bInitTable = false;
+// Статические таблицы для упрощения расчетов шифрования и дешифрования
+block_128_bit_t  CIridiumCipherGrasshopper::m_aPILEnc128[MAX_BIT_PARTS][256];
+block_128_bit_t  CIridiumCipherGrasshopper::m_aLDec128[MAX_BIT_PARTS][256];
+block_128_bit_t  CIridiumCipherGrasshopper::m_aPILDec128[MAX_BIT_PARTS][256];
 
 // result & x must be different
 void plus128multi(block_128_bit_t* in_pDst, const block_128_bit_t* in_pX, const block_128_bit_t in_Array[][256])
@@ -115,14 +120,7 @@ void append128multi(block_128_bit_t* in_pDst, block_128_bit_t* in_pX, const bloc
    plus128multi(in_pDst, in_pX, in_Array);
    copy128(in_pX, in_pDst);
 }
-
-// Флаг инициализации таблиц
-bool             CIridiumCipherGrasshopper::m_bInitTable = false;
-// Статические таблицы для упрощения расчетов шифрования и дешифрования
-block_128_bit_t  CIridiumCipherGrasshopper::m_aPILEnc128[MAX_BIT_PARTS][256];
-block_128_bit_t  CIridiumCipherGrasshopper::m_aLDec128[MAX_BIT_PARTS][256];
-block_128_bit_t  CIridiumCipherGrasshopper::m_aPILDec128[MAX_BIT_PARTS][256];
-#endif
+#endif  // USE_TABLES == 1
 
 /**
    Выполнение операции p(x) = x^8 + x^7 + x^6 + x + 1
@@ -247,10 +245,10 @@ void CIridiumCipherGrasshopper::DecryptInit(grasshopper_context_t* out_pCTX, con
 {
     EncryptInit(out_pCTX, in_pKey);
     
-#if(USE_TABLES)
+#if USE_TABLES == 1
     for(u8 i = 1; i < 10; i++)
         InverseL(&out_pCTX->m_aKeys[i]);
-#endif
+#endif  // USE_TABLES == 1
 }
 
 /**
@@ -261,19 +259,19 @@ void CIridiumCipherGrasshopper::DecryptInit(grasshopper_context_t* out_pCTX, con
 */
 void CIridiumCipherGrasshopper::EncryptBlock(grasshopper_context_t* in_pCTX, block_128_bit_t* in_pBlock)
 {
-#if(USE_TABLES)
+#if USE_TABLES == 1
    block_128_bit_t l_Buffer;
-#endif
+#endif  // USE_TABLES == 1
 
    for(u8 i = 0; i < 9; i++)
    {
       xor128(in_pBlock, &in_pCTX->m_aKeys[i]);
-#if(USE_TABLES)
+#if USE_TABLES == 1
       append128multi(&l_Buffer, in_pBlock, m_aPILEnc128);
 #else
       convert128(in_pBlock, g_aGrasshoperPI);
       L(in_pBlock);
-#endif
+#endif  // USE_TABLES == 1
    }
     
    xor128(in_pBlock, &in_pCTX->m_aKeys[9]);
@@ -287,7 +285,7 @@ void CIridiumCipherGrasshopper::EncryptBlock(grasshopper_context_t* in_pCTX, blo
 */
 void CIridiumCipherGrasshopper::DecryptBlock(grasshopper_context_t* in_pCTX, block_128_bit_t* in_pBlock)
 {
-#if(USE_TABLES)
+#if USE_TABLES == 1
 
    block_128_bit_t l_Buffer;
    append128multi(&l_Buffer, in_pBlock, m_aLDec128);
@@ -313,7 +311,7 @@ void CIridiumCipherGrasshopper::DecryptBlock(grasshopper_context_t* in_pCTX, blo
       xor128(in_pBlock, &in_pCTX->m_aKeys[i]);
    }
 
-#endif
+#endif  // USE_TABLES == 1
 }
 
 /**
@@ -326,7 +324,7 @@ CIridiumCipherGrasshopper::CIridiumCipherGrasshopper() : CIridiumCipher()
    memset(&m_ECTX, 0, sizeof(grasshopper_context_t));
    memset(&m_DCTX, 0, sizeof(grasshopper_context_t));
 
-#if(USE_TABLES)
+#if USE_TABLES == 1
    // Проверка инициализации таблиц декодирования
    if(!m_bInitTable)
    {
@@ -357,7 +355,7 @@ CIridiumCipherGrasshopper::CIridiumCipherGrasshopper() : CIridiumCipher()
       }
       m_bInitTable = true;
    }
-#endif
+#endif  // USE_TABLES == 1
 }
 
 /**
@@ -525,6 +523,9 @@ bool CIridiumCipherGrasshopper::Decode(u8* in_pBuffer, size_t in_stSize)
 }
 
 #if 0
+
+#include "time.h"
+
 //////////////////////////////////////////////////////////////////////////
 // Тест от автора
 //////////////////////////////////////////////////////////////////////////

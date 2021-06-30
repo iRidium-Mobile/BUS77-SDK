@@ -158,10 +158,21 @@
    defined (STM32F479xx) || \
    defined (STM32F412Cx) || defined (STM32F412Rx) || defined (STM32F412Vx) || defined (STM32F412Zx) || \
    defined (STM32F413xx) || \
-   defined (STM32F423xx)
+   defined (STM32F423xx) || \
+   defined (STM32L452xx)
    #define IRIDIUM_MCU_PLATFORM
    #define IRIDIUM_MCU_CORTEX_M
 #endif
+#endif
+
+#if defined(__XTENSA__)
+   #define IRIDIUM_MCU_PLATFORM
+   #define IRIDIUM_MCU_ESP
+   #if defined(ESP8266)
+      #define IRIDIUM_MCU_ESP8266
+   #else
+      #define IRIDIUM_MCU_ESP32
+   #endif
 #endif
 
 // Linux

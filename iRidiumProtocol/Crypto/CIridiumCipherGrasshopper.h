@@ -128,6 +128,10 @@ const static u8 g_aGrasshopperLVec[16] =
 #define BITS         32                            // Оптимизация под 32 битный процессор
 #define USE_TABLES   0                             // Для экономии памяти, таблицы не используются
 
+#elif defined(IRIDIUM_MCU_ESP)
+#define BITS         32                            // Оптимизация под 32 битный процессор
+#define USE_TABLES   0                             // Для экономии памяти, таблицы не используются
+
 #else
 #define BITS         32                            // Оптимизация под 32 битные процессора
 #define USE_TABLES   1                             // Использование талиц для ускорения
@@ -202,14 +206,14 @@ private:
    void EncryptBlock(grasshopper_context_t* in_pCTX, block_128_bit_t* in_pBlock);
    void DecryptBlock(grasshopper_context_t* in_pCTX, block_128_bit_t* in_pBlock);
 
-#if(USE_TABLES)
+#if USE_TABLES == 1
    // Флаг инициализации таблиц
    static bool             m_bInitTable;
    // Статические таблицы для упрощения расчетов шифрования и дешифрования
    static block_128_bit_t  m_aPILEnc128[MAX_BIT_PARTS][256];
    static block_128_bit_t  m_aLDec128[MAX_BIT_PARTS][256];
    static block_128_bit_t  m_aPILDec128[MAX_BIT_PARTS][256];
-#endif
+#endif  // USE_TABLES == 1
 
    // Контекст кодирования и декодирования
    grasshopper_context_t   m_ECTX;

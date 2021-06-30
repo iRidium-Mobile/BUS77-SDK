@@ -36,7 +36,8 @@ CIridiumBusProtocol::CIridiumBusProtocol() : CIridiumProtocol()
    // Инициализация параметров протокола
    m_OutPH.m_u8Type              = IRIDIUM_BUS_PROTOCOL_ID;
    m_OutPH.m_Flags.m_bPriority   = false;
-   m_OutPH.m_Flags.m_bSegment    = false;
+   m_OutPH.m_Flags.m_bSrcSeg     = false;
+   m_OutPH.m_Flags.m_bDstSeg     = false;
    m_OutPH.m_Flags.m_bAddress    = true;
    m_OutPH.m_Flags.m_u2Version   = IRIDIUM_PROTOCOL_BUS_VERSION;
    m_OutPH.m_Flags.m_u3Crypt     = IRIDIUM_CRYPTION_NONE;
@@ -110,7 +111,7 @@ bool CIridiumBusProtocol::SendSetLIDRequest(iridium_address_t in_DstAddr, const 
 {
    // Инициализация широковещательного запроса
    InitRequestPacket(true, in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_SET_LID);
-   m_OutMH.m_Flags.m_bNoTID      = true;
+   //m_OutMH.m_Flags.m_bNoTID = true;
 
    // Начало работы с пакетом
    Begin();
@@ -137,15 +138,16 @@ bool CIridiumBusProtocol::SendSetLIDRequest(iridium_address_t in_DstAddr, const 
 void CIridiumBusProtocol::InitRequestPacket(bool in_bBrodcast, iridium_address_t in_DstAddr, u8 in_u8Type)
 {
    // Заполнение заголовка пакета
-   m_OutPH.m_Flags.m_bSegment    = (0 != (in_DstAddr & 0xFF00));
+   m_OutPH.m_Flags.m_bSrcSeg     = false;
+   m_OutPH.m_Flags.m_bDstSeg     = (0 != (in_DstAddr & 0xFF00));
    m_OutPH.m_Flags.m_bAddress    = (false == in_bBrodcast);
+   m_OutPH.m_u8Route             = 0;
    m_OutPH.m_SrcAddr             = m_Address;
    m_OutPH.m_DstAddr             = in_DstAddr;
 
    // Заполнение заголовка сообщения
    m_OutMH.m_Flags.m_bDirection  = IRIDIUM_REQUEST;
    m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
-   m_OutMH.m_Flags.m_bNoTID      = false;
    m_OutMH.m_Flags.m_bEnd        = true;
    m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(in_u8Type);
    m_OutMH.m_u8Type              = in_u8Type;
@@ -161,15 +163,16 @@ void CIridiumBusProtocol::InitRequestPacket(bool in_bBrodcast, iridium_address_t
 void CIridiumBusProtocol::InitResponsePacket()
 {
    // Заполнение заголовка пакета
-   m_OutPH.m_Flags.m_bSegment    = m_pInPH->m_Flags.m_bSegment;
+   m_OutPH.m_Flags.m_bSrcSeg     = false;
+   m_OutPH.m_Flags.m_bDstSeg     = m_pInPH->m_Flags.m_bSrcSeg;
    m_OutPH.m_Flags.m_bAddress    = true;
+   m_OutPH.m_u8Route             = m_pInPH->m_u8Route;
    m_OutPH.m_SrcAddr             = m_Address;
    m_OutPH.m_DstAddr             = m_pInPH->m_SrcAddr;
 
    // Заполнение заголовка сообщения
    m_OutMH.m_Flags.m_bDirection  = IRIDIUM_RESPONSE;
    m_OutMH.m_Flags.m_bError      = IRIDIUM_NO_ERROR;
-   m_OutMH.m_Flags.m_bNoTID      = false;
    m_OutMH.m_Flags.m_bEnd        = true;
    m_OutMH.m_Flags.m_u4Version   = m_InMH.m_Flags.m_u4Version;
    m_OutMH.m_u8Type              = m_InMH.m_u8Type;
@@ -292,7 +295,6 @@ bool CIridiumBusProtocol::DecodeMessage(u8 in_u8Crypt, u8*& out_rBuffer, size_t&
       if(!in_u8Crypt)
          l_bResult = true;
    }
-
    return l_bResult;
 }
 

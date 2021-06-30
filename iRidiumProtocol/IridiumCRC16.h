@@ -25,7 +25,7 @@ extern "C" {
 
 // Работа с Flash памятью
 u16 GetCRC16Modbus(u16 in_u16Init, const u8* in_pBuffer, size_t in_stSize);
-   
+
 #ifdef __cplusplus
 }
 #endif

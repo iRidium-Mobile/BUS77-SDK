@@ -471,7 +471,7 @@ bool COutBuffer::AddValue(u8 in_u8Type, universal_value_t& in_rValue, size_t& ou
    if((in_u8Type == IVT_STRING8 || in_u8Type == IVT_ARRAY_U8) && in_rValue.m_Array.m_stSize && in_rValue.m_Array.m_pPtr)
    {
       // Проверка инициализации остатка
-      if(out_stRemain == (size_t)-1)
+      if(out_stRemain == ~0)
          out_stRemain = in_rValue.m_Array.m_stSize;
    } else
       out_stRemain = 0;

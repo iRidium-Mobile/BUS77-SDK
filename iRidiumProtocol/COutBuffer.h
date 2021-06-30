@@ -102,6 +102,12 @@ public:
    bool Result()
       { return (m_pPtr <= m_pEnd); }
 
+   // Установка/получение текущей позиции
+   void SetPtr(u8* in_pPtr)
+      { m_pPtr = in_pPtr; }
+   u8* GetPtr()
+      { return m_pPtr; }
+ 
 #if 0
    bool UnitTest();
 #endif

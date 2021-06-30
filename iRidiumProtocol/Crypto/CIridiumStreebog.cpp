@@ -106,7 +106,6 @@ void CIridiumStreebog::SLP(u8* out_pDst)
 {
    u8 l_aVal[8];
    u8 l_aTmp[STREEBOG_BLOCK_SIZE];
-   //memcpy(l_aTmp, out_pDst, STREEBOG_BLOCK_SIZE);
 
    for(u8 i = 0; i < STREEBOG_BLOCK_SIZE; i++)
    {

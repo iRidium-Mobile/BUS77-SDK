@@ -104,23 +104,6 @@ void CInBuffer::Shift()
 }
 
 /**
-   Вырезать фрагмент буфера
-   на входе    :  in_stStart  - начальная позиция
-                  in_stSize   - размер фрагмента
-   на выходе   :  *
-*/
-void CInBuffer::Cut(size_t in_stStart, size_t in_stSize)
-{
-   // сдвинем данные
-   u8* l_pPtr = m_pBuffer + in_stStart;
-   size_t l_stMove = m_pWritePtr - (l_pPtr + in_stSize);
-   if(l_stMove)
-      memmove(l_pPtr, l_pPtr + in_stSize, l_stMove);
-
-   m_pWritePtr -= in_stSize;
-}
-
-/**
    Добавление байта в буфер
    на входе    :  in_u8Byte   - значение для добавления
    на выходе   :  true  - значение было добавлено
@@ -150,6 +133,8 @@ size_t CInBuffer::Add(const void* in_pBuffer, size_t in_stSize)
    size_t l_stResult = Free();
    if(l_stResult > in_stSize)
       l_stResult = in_stSize;
+   else
+      l_stResult = 0;
 
    // Копирование данных
    memcpy(m_pWritePtr, in_pBuffer, l_stResult);

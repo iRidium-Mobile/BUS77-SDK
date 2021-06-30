@@ -60,7 +60,8 @@ s8 CIridiumBusInBuffer::OpenPacket()
       m_InPH.m_u8Type            = l_pPtr[0] & IRIDIUM_PROTOCOL_ID_MASK;
       m_InPH.m_Flags.m_bPriority = (l_pPtr[0] >> 7) & 1;
       m_InPH.m_Flags.m_bAddress  = (l_pPtr[0] >> 3) & 1;
-      m_InPH.m_Flags.m_bSegment  = (l_pPtr[1] >> 6) & 1;
+      m_InPH.m_Flags.m_bSrcSeg   = (l_pPtr[1] >> 6) & 1;
+      m_InPH.m_Flags.m_bDstSeg   = (l_pPtr[1] >> 5) & 1;
       m_InPH.m_Flags.m_u2Version = (l_pPtr[1] >> 3) & 3;
       // Получение размера сообщения
       m_Packet.m_stSize          = l_pPtr[2];
@@ -70,10 +71,14 @@ s8 CIridiumBusInBuffer::OpenPacket()
       {
          // Вычисление размера заголовка
          m_Packet.m_stHeader = 1;
-         if(m_InPH.m_Flags.m_bSegment)
-            m_Packet.m_stHeader <<= 1;
+         if(l_pPtr[1] & 0x80)
+            m_Packet.m_stHeader++;
+         if(m_InPH.m_Flags.m_bSrcSeg)
+            m_Packet.m_stHeader++;
+         if(m_InPH.m_Flags.m_bDstSeg)
+            m_Packet.m_stHeader++;
          if(m_InPH.m_Flags.m_bAddress)
-            m_Packet.m_stHeader <<= 1;
+            m_Packet.m_stHeader++;
          m_Packet.m_stHeader += IRIDIUM_BUS_MIN_HEADER_SIZE;
 
          // Проверка наличия данных заголовка в буфере
@@ -84,8 +89,14 @@ s8 CIridiumBusInBuffer::OpenPacket()
 
             u8* l_pBody = l_pPtr + IRIDIUM_BUS_MIN_HEADER_SIZE;
 
+            // Проверка наличия дополнительных данных
+            if(l_pPtr[1] & 0x80)
+            {
+               l_pBody = ReadByte(l_pBody, l_u8Byte);
+               m_InPH.m_u8Route = l_u8Byte & 0x7F;
+            }
             // Чтение сегмента источника, если сегмент указан
-            if(m_InPH.m_Flags.m_bSegment)
+            if(m_InPH.m_Flags.m_bSrcSeg)
             {
                l_pBody = ReadByte(l_pBody, l_u8Byte);
                m_InPH.m_SrcAddr = l_u8Byte << 8;
@@ -94,15 +105,15 @@ s8 CIridiumBusInBuffer::OpenPacket()
             l_pBody = ReadByte(l_pBody, l_u8Byte);
             m_InPH.m_SrcAddr |= l_u8Byte;
 
+            // Чтение сегмента приемника, если сегмент указан
+            if(m_InPH.m_Flags.m_bDstSeg)
+            {
+               l_pBody = ReadByte(l_pBody, l_u8Byte);
+               m_InPH.m_DstAddr = l_u8Byte << 8;
+            }
             // Получение данных о приемнике
             if(m_InPH.m_Flags.m_bAddress)
             {
-               // Чтение сегмента приемника, если сегмент указан
-               if(m_InPH.m_Flags.m_bSegment)
-               {
-                  l_pBody = ReadByte(l_pBody, l_u8Byte);
-                  m_InPH.m_DstAddr = l_u8Byte << 8;
-               }
                // Чтение адреса приемника
                l_pBody = ReadByte(l_pBody, l_u8Byte);
                m_InPH.m_DstAddr |= l_u8Byte;

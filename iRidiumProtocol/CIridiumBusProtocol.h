@@ -21,10 +21,8 @@
 #include "CIridiumBusInBuffer.h"
 #include "CIridiumBusOutBuffer.h"
 
-#if defined(IRIDIUM_ENABLE_CIPHER)
-#if defined(IRIDIUM_ENABLE_GRASSHOPPER_CIPHER)
+#if defined(IRIDIUM_ENABLE_CIPHER) && defined(IRIDIUM_ENABLE_GRASSHOPPER_CIPHER)
 #include "CIridiumCipherGrasshopper.h"
-#endif
 #endif
 
 class CIridiumBusProtocol : public CIridiumProtocol

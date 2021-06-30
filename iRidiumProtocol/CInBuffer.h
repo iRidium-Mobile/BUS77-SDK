@@ -50,7 +50,6 @@ public:
    virtual void Clear();                           // Очистка с обнулением данных
    void Skip(size_t in_stSize);                    // Пропустить указаное количество байт
    void Shift();                                   // Сдвиг буфера
-   void Cut(size_t in_stStart, size_t in_stSize);  // Удаление фрагмента буфера
 
    // Добавление данных
    bool AddByte(u8 in_u8Byte);                     // Добавление одного байт

@@ -88,6 +88,17 @@ bool CIridiumInBuffer::GetSearchInfo(iridium_search_info_t& out_rInfo)
    {
       // Получение HWID
       l_bResult = GetString(out_rInfo.m_pszHWID);
+      if(Size() > 0)
+      {
+         if(l_bResult)
+            l_bResult = GetU8(out_rInfo.m_u8Event);
+         if(l_bResult)
+            l_bResult = GetU8(out_rInfo.m_u8Flags);
+         if(l_bResult)
+            l_bResult = GetU32LE(out_rInfo.m_u32UserID);
+         if(l_bResult)
+            l_bResult = GetU16LE(out_rInfo.m_u16Change);
+      }
    }
    return l_bResult;
 }
@@ -129,14 +140,16 @@ bool CIridiumInBuffer::GetDeviceInfo(iridium_device_info_t& out_rInfo)
       if(l_bResult)
          l_bResult = GetU8(out_rInfo.m_u8Flags);
       if(l_bResult)
-         l_bResult = GetU8(out_rInfo.m_u8FirmwareID);
+         l_bResult = GetU16LE(out_rInfo.m_u16FirmwareID);
       if(l_bResult)
-         l_bResult = FillData(out_rInfo.m_aVersion, 3);
+         l_bResult = FillData(out_rInfo.m_aVersion, sizeof(out_rInfo.m_aVersion));
       // Получение количества каналов управления и обратной связи
       if(l_bResult)
       {
          GetU32LE(out_rInfo.m_u32Channels);
          GetU32LE(out_rInfo.m_u32Tags);
+         GetU32LE(out_rInfo.m_u32UserID);
+         GetU16LE(out_rInfo.m_u16Change);
       }
    }
    return l_bResult;
@@ -146,6 +159,12 @@ bool CIridiumInBuffer::GetDeviceInfo(iridium_device_info_t& out_rInfo)
    Получение общего описания канала
    на входе    :  out_rDesc   - ссылка на структуру куда нужно поместить общее описание канала
    на выходе   :  успешность получения данных
+   примечание  :  [I][A][S][U][T][T][T][T]
+                  I  - флаг наличия минимального значения
+                  A  - флаг наличия максимального значения
+                  S  - флаг наличия шагового значения
+                  U  - флаг наличия единиц измерения
+                  T  - тип значения
 */
 bool CIridiumInBuffer::GetDescription(iridium_description_t& out_rDesc)
 {
@@ -153,6 +172,7 @@ bool CIridiumInBuffer::GetDescription(iridium_description_t& out_rDesc)
    bool l_bMin = false;
    bool l_bMax = false;
    bool l_bStep = false;
+   bool l_bUnits = false;
 
    memset(&out_rDesc, 0, sizeof(iridium_description_t));
    out_rDesc.m_u8Type = IVT_NONE;
@@ -165,8 +185,9 @@ bool CIridiumInBuffer::GetDescription(iridium_description_t& out_rDesc)
       l_bMin = (0 != (out_rDesc.m_u8Type & 0x80));
       l_bMax = (0 != (out_rDesc.m_u8Type & 0x40));
       l_bStep = (0 != (out_rDesc.m_u8Type & 0x20));
+      l_bUnits = (0 != (out_rDesc.m_u8Type & 0x10));
       // Отделение типа
-      out_rDesc.m_u8Type &= 0x1F;
+      out_rDesc.m_u8Type &= 0x0F;
       switch(out_rDesc.m_u8Type)
       {
       // Если тип не определен
@@ -298,10 +319,14 @@ bool CIridiumInBuffer::GetDescription(iridium_description_t& out_rDesc)
          break;
       }
    }
+   // Получение единиц измерения
+   if(l_bUnits && l_bResult)
+      l_bResult = GetU16LE(out_rDesc.m_u16Units);
 
    // Получение текстового описания канала
    if(l_bResult)
       l_bResult = GetString(out_rDesc.m_pszDescription);
+
    return l_bResult;
 }
 
@@ -309,6 +334,9 @@ bool CIridiumInBuffer::GetDescription(iridium_description_t& out_rDesc)
    Получение описания канала обратной связи
    на входе    :  out_rDesc   - ссылка на структуру куда нужно поместить описание канала обратной связи
    на выходе   :  успешность получения данных
+   примечание  :  [O][X][X][X][X][X][X][X]
+                  O  - флаг указывающий что канал владеет глобальной переменной
+                  X  - зарезерверовно
 */
 bool CIridiumInBuffer::GetTagDescription(iridium_tag_description_t& out_rDesc)
 {
@@ -322,7 +350,7 @@ bool CIridiumInBuffer::GetTagDescription(iridium_tag_description_t& out_rDesc)
       if(l_bResult)
       {
          // Получение флага владения
-         out_rDesc.m_Flags.m_bOwner = (l_u8Temp >> 7) & 1;
+         out_rDesc.m_Flags.m_bOwner = (0 != (l_u8Temp & 0x80));
          // Получение связаной с каналом обратной связи глобальной переменной
          if(Size() >= 2)
             l_bResult = GetU16LE(out_rDesc.m_u16Variable);
@@ -337,11 +365,15 @@ bool CIridiumInBuffer::GetTagDescription(iridium_tag_description_t& out_rDesc)
    Получение описания канала управления
    на входе    :  out_rDesc - ссылка на структуру куда нужно поместить описание канала управления
    на выходе   :  успешность получения данных
-   примечание  :  [V][W][R][M][M][M][M][M]
-                  V  - флаг наличия глобальной переменной
+   примечание  :  [V][W][R][M][M][M][M][M] список флагов
+                  V  - флаг наличия списка глобальных переменных у канала управления, если флаг установлен, количество каналов расчитавается как M + 1
                   W  - флаг наличия пароля для измения значения
                   R  - флаг наличия пароля для чтения значения
                   M  - максимальное количество глобальных переменных - 1
+                  [V][X][X][C][C][C][C][C]
+                  X  - зарезервировано
+                  V  - флаг наличия глобальных переменных, если флаг установлен количество каналов расчитывается как C + 1
+                  C  - количество глобальных переменных - 1
 */
 bool CIridiumInBuffer::GetChannelDescription(iridium_channel_description_t& out_rDesc)
 {
@@ -355,23 +387,24 @@ bool CIridiumInBuffer::GetChannelDescription(iridium_channel_description_t& out_
       if(l_bResult)
       {
          // Извлечение флагов доступа
-         out_rDesc.m_Flags.m_bWritePassword = (l_u8Temp >> 6) & 1;
-         out_rDesc.m_Flags.m_bReadPassword = (l_u8Temp >> 5) & 1;
+         out_rDesc.m_Flags.m_bWritePassword = (0 != (l_u8Temp & 0x40));
+         out_rDesc.m_Flags.m_bReadPassword = (0 != (l_u8Temp & 0x20));
 
-         // Определение количества переменных
+         // Определение максимального количества переменных
          out_rDesc.m_u8MaxVariables = 0;
          if(l_u8Temp & 0x80)
             out_rDesc.m_u8MaxVariables = (l_u8Temp & 0x1F) + 1;
          
          // Подготовка переменных
          out_rDesc.m_pVariables = NULL;
-         // Получение количества глобальных переменных
-         l_bResult = GetU8(out_rDesc.m_u8Variables);
+         // Получение списка флагов
+         l_bResult = GetU8(l_u8Temp);
          if(l_bResult)
          {
-            // Проверка на максимальное колличество переменных
-            if(out_rDesc.m_u8Variables > out_rDesc.m_u8MaxVariables)
-               out_rDesc.m_u8Variables = out_rDesc.m_u8MaxVariables;
+            // Получение количества глобальных переменных
+            out_rDesc.m_u8Variables = l_u8Temp & 0x1f;
+            if(l_u8Temp & 0x80)
+               out_rDesc.m_u8Variables++;
          
             // Проверка наличия глобальных переменных
             if(out_rDesc.m_u8Variables)

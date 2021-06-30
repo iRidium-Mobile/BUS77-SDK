@@ -183,11 +183,21 @@ bool CIridiumProtocol::SendSearchResponse(u16 in_u16TID, iridium_search_info_t& 
 /**
    Отправка запроса на получение информации об удаленном сервере
    на входе    :  in_DstAddr  - адрес получателя
+                  in_pszHWID  - указатель на данные HWID
    на выходе   :  успешность
 */
-bool CIridiumProtocol::SendDeviceInfoRequest(iridium_address_t in_DstAddr)
+bool CIridiumProtocol::SendDeviceInfoRequest(iridium_address_t in_DstAddr, char* in_pszHWID)
 {
-   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_DEVICE_INFO);
+   // Инициализация пакета запроса
+   InitRequestPacket((NULL != in_pszHWID), in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_DEVICE_INFO);
+
+   // Начало работы с пакетом
+   Begin();
+   // Добавление HWID устройства
+   if(in_pszHWID)
+      m_pOutMessage->AddString(in_pszHWID);
+   // Окончание работы и отправка пакета
+   return End();
 }
 
 /**
@@ -223,8 +233,18 @@ void CIridiumProtocol::ReceiveDeviceInfoRequest()
    iridium_device_info_t l_Info;
    memset(&l_Info, 0, sizeof(iridium_device_info_t));
 
+   // Проверка на широковещательный пакет
+   if(!m_pInPH->m_Flags.m_bAddress)
+   {
+      // Получение и проверка HWID
+      char* l_pszHWID = NULL;
+      if(m_pInMessage->GetString(l_pszHWID) && CompareHWID(l_pszHWID))
+         l_bResult = true;
+   } else
+      l_bResult = true;
+
    // Получение данных устройства
-   if(GetDeviceInfo(l_Info))
+   if(l_bResult && GetDeviceInfo(l_Info))
    {
       // Инициализация пакета ответа
       InitResponsePacket();
@@ -407,7 +427,7 @@ void CIridiumProtocol::ReceiveSmartAPIResponse()
 void CIridiumProtocol::ReceiveSmartAPIRequest()
 {
    bool l_bResult = true;
-   size_t l_stRemain = ~0;//(size_t)-1;
+   size_t l_stRemain = ~0;
    universal_value_t l_Value;
 
    // Заполнение данных пакета
@@ -439,6 +459,83 @@ void CIridiumProtocol::ReceiveSmartAPIRequest()
 
 #endif   // #if defined(IRIDIUM_CONFIG_SYSTEM_SMART_API_SLAVE)
 
+#if defined(IRIDIUM_CONFIG_SYSTEM_BLINK_MASTER)
+
+/**
+   Отправка запроса на получение информации о Smart API
+   на входе    :  in_DstAddr  - адрес получателя
+                  in_pszHWID  - указатель на HWID устройства
+                  in_u32Time  - время мигания
+   на выходе   :  успешность
+*/
+bool CIridiumProtocol::SendBlinkRequest(iridium_address_t in_DstAddr, const char* in_pszHWID, u32 in_u32Time)
+{
+   // Инициализация пакета запроса
+   InitRequestPacket((NULL != in_pszHWID), in_DstAddr, IRIDIUM_MESSAGE_SYSTEM_BLINK);
+
+   // Начало работы с пакетом
+   Begin();
+   // Добавление HWID устройства
+   if(in_pszHWID)
+      m_pOutMessage->AddString(in_pszHWID);
+   // Добавление времени мигания
+   m_pOutMessage->AddU32LE(in_u32Time);
+   // Окончание работы и отправка пакета
+   return End();
+}
+
+/**
+   Обработка полученого ответа на запрос получения информации о Smart API
+   на входе    :  *
+   на выходе   :  *
+*/
+void CIridiumProtocol::ReceiveBlinkResponse()
+{
+   m_eError = IRIDIUM_OK;
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SYSTEM_BLINK_MASTER)
+
+#if defined(IRIDIUM_CONFIG_SYSTEM_BLINK_SLAVE)
+
+/**
+   Обработка полученого запроса получения информации о Smart API
+   на входе    :  *
+   на выходе   :  *
+*/
+void CIridiumProtocol::ReceiveBlinkRequest()
+{
+   bool l_bResult = false;
+   u32 l_u32Value = 0;
+
+   // Проверка на широковещательный пакет
+   if(!m_pInPH->m_Flags.m_bAddress)
+   {
+      // Получение и проверка HWID
+      char* l_pszHWID = NULL;
+      if(m_pInMessage->GetString(l_pszHWID) && CompareHWID(l_pszHWID))
+         l_bResult = true;
+   } else
+      l_bResult = true;
+
+   // Получение данных устройства
+   if(l_bResult)
+   {
+      // Получение значения
+      m_pInMessage->GetU32LE(l_u32Value);
+      // Установка времени мерцания
+      SetBlinkTime(l_u32Value);
+      // Отправим ответ 
+      SendResponse(IRIDIUM_OK);
+   }
+
+   // Проверка наличия ошибки
+   if(!l_bResult)
+      m_eError = IRIDIUM_UNKNOWN_ERROR;
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SYSTEM_BLINK_SLAVE)
+
 #if defined(IRIDIUM_CONFIG_SET_VARIABLE_MASTER)
 
 /**
@@ -452,13 +549,13 @@ void CIridiumProtocol::ReceiveSmartAPIRequest()
 bool CIridiumProtocol::SendSetVariableRequest(u16 in_u16Variable, u8 in_u8Type, universal_value_t& in_rValue)
 {
    bool l_bResult = false;
-   size_t l_stRemain = ~0;//(size_t)-1;
+   size_t l_stRemain = ~0;
    // Проверка входнях данных
    if(in_u16Variable)
    {
       // Инициализация широковещательного запроса
       InitRequestPacket(true, 0, IRIDIUM_MESSAGE_SET_VARIABLE);
-      m_OutMH.m_Flags.m_bNoTID      = true;
+      m_OutMH.m_Flags.m_bNoTID = true;
       // Выполнять пока нет ошибки и все данные значения не переданы
       l_bResult = true;
       while(l_bResult && l_stRemain)
@@ -534,7 +631,7 @@ bool CIridiumProtocol::SendGetVariableRequest(u16 in_u16Variable)
    if(in_u16Variable)
    {
       // Инициализация широковещательного запроса
-      InitRequestPacket(true, 0, IRIDIUM_MESSAGE_SET_VARIABLE);
+      InitRequestPacket(true, 0, IRIDIUM_MESSAGE_GET_VARIABLE);
       // Начало работы с пакетом
       Begin();
       // Добавляем идентификатор глобальной переменной
@@ -613,16 +710,132 @@ bool CIridiumProtocol::SendGetVariableResponse(u16 in_u16Variable, u8 in_u8Type,
 
 #endif   // #if defined(IRIDIUM_CONFIG_GET_VARIABLE_SLAVE)
 
+#if defined(IRIDIUM_CONFIG_DELETE_VARIABLES_MASTER)
+
+/**
+   Запрос на отправку удаления списка глобальных переменных
+   на входе    :  in_pVariable   - указатель на массив идентифкаторов глобальных переменных
+                  in_u8Size      - количество удаляемых переменных
+                  in_u32PIN      - пин код
+   на выходе   :  успешность
+   примечание  :  сообщение является широковещательным (без получателя)
+*/
+bool CIridiumProtocol::SendDeleteVariablesRequest(u16* in_pVariables, u8 in_u8Size, u32 in_u32PIN)
+{
+   bool l_bResult = false;
+   u8 l_u8Count = 0;
+   // Проверка входнях данных
+   if(in_pVariables && in_u8Size)
+   {
+      // Инициализация широковещательного запроса
+      InitRequestPacket(true, 0, IRIDIUM_MESSAGE_DELETE_VARIABLES);
+      // Начало работы с пакетом
+      Begin();
+      // Создание места для количества глобальных переменных
+      u8* l_pPtr = m_pOutMessage->CreateAnchor(1);
+      // Добавляем идентификатор глобальной переменной
+      for(u8 i = 0; i < in_u8Size; i++)
+      {
+         // Проверка наличия переменной
+         if(in_pVariables[i])
+         {
+            // Добавление переменной
+            m_pOutMessage->AddU16LE(in_pVariables[i]);
+            if(++l_u8Count == IRIDIUM_MAX_VARIABLES)
+               break;
+         }
+      }
+      // Запись количества глобальных переменных для удаления
+      m_pOutMessage->SetAnchorLE(l_pPtr, &l_u8Count, 1);
+      // Добавление PIN кода
+      if(in_u32PIN)
+         m_pOutMessage->AddU32LE(in_u32PIN);
+
+      // Окончание работы и отправка пакета
+      l_bResult = End();
+   }
+   return l_bResult;
+}
+
+/**
+   Обработка полученого ответа на запроса изменения глобальной переменной
+   на входе    :  *
+   на выходе   :  *
+*/
+void CIridiumProtocol::ReceiveDeleteVariablesResponse()
+{
+   u16 l_u16Variable = 0;
+   u8 l_u8Type = 0;
+   universal_value_t l_Value;
+   // Получение списка глобальных переменных для удаления
+   m_pInMessage->GetU16LE(l_u16Variable);
+   // Чтение значения глобальной переменной
+   m_pInMessage->GetValue(l_u8Type, l_Value);
+   // Установка переменной
+   SetVariable(l_u16Variable, l_u8Type, l_Value, m_InMH.m_Flags.m_bEnd);
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_DELETE_VARIABLE_MASTER)
+
+#if defined(IRIDIUM_CONFIG_DELETE_VARIABLES_SLAVE)
+
+/**
+   Обработка полученого запроса изменения глобальной переменной
+   на входе    :  *
+   на выходе   :  *
+*/
+void CIridiumProtocol::ReceiveDeleteVariablesRequest()
+{
+   u8 l_u8Size = 0;
+   u16* l_pVariables = NULL;
+   u32 l_u32PIN = 0;
+
+   // Получение количества удаляемых переменных
+   m_pInMessage->GetU8(l_u8Size);
+
+   // Получение списка глобальных переменных
+   l_pVariables = (u16*)m_pInMessage->GetDataPtr();
+   m_pInMessage->Skip(l_u8Size * sizeof(u16));
+
+   // Получение пин кода
+   if(m_pInMessage->Size() >= sizeof(u32))
+      m_pInMessage->GetU32LE(l_u32PIN);
+
+   s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, 0);
+   if(l_s8Result > 0)
+   {
+      // Если устройство удалило что либо из списка переменных, пошлем сообщение подтверждения иначе ничего не отвечаем
+      if(DeleteVariable(l_pVariables, l_u8Size))
+         SendResponse(IRIDIUM_OK);
+
+      m_eError = IRIDIUM_OK;
+   } else
+   {
+      // Определение ошибки
+      m_eError = (l_s8Result < 0) ? IRIDIUM_PIN_LOCK : IRIDIUM_BAD_PIN;
+   }
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_DELETE_VARIABLE_SLAVE)
+
 #if defined(IRIDIUM_CONFIG_GET_TAGS_MASTER)
 
 /**
    Отправка запроса на получение списка тегов
    на входе    :  in_DstAddr  - адрес получателя
+                  in_u8Flags  - список флагов
    нв выходе   :  успешность
 */
-bool CIridiumProtocol::SendGetTagsRequest(iridium_address_t in_DstAddr)
+bool CIridiumProtocol::SendGetTagsRequest(iridium_address_t in_DstAddr, u8 in_u8Flags)
 {
-   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_GET_TAGS);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_TAGS);
+   // Начало работы с пакетом
+   Begin();
+   // Добавление списка флагов
+   m_pOutMessage->AddU8(in_u8Flags & IRIDIUM_REQUEST_FLAG_MASK);
+   // Окончание работы и отправка пакета
+   return End();
 }
 
 /**
@@ -632,17 +845,42 @@ bool CIridiumProtocol::SendGetTagsRequest(iridium_address_t in_DstAddr)
 */
 void CIridiumProtocol::ReceiveGetTagsResponse()
 {
-   u16 l_u16Tags = 0;
+   u8 l_u8Flags = 0;
+   u16 l_u16Count = 0;
    iridium_tag_info_t l_Info;
    // Получение количества тегов
-   m_pInMessage->GetU16LE(l_u16Tags);
+   m_pInMessage->GetU16LE(l_u16Count);
+   // Получение списка флагов
+   l_u8Flags = (l_u16Count >> 8) & IRIDIUM_REQUEST_FLAG_MASK;
+   l_u16Count &= ~(IRIDIUM_REQUEST_FLAG_MASK << 8);
 
    // Чтение списка тегов
-   for(u16 i = 0; i < l_u16Tags; i++)
+   for(u16 i = 0; i < l_u16Count; i++)
    {
       // Получение идентификатора, имени и значения тега
       m_pInMessage->GetU32LE(l_Info.m_u32ID);
-      m_pInMessage->GetString(l_Info.m_pszName);
+
+      // Проверка были ли данные
+      if(0 == (l_u8Flags & IRIDIUM_REQUEST_FLAG_WITHOUT_NAME))
+         m_pInMessage->GetString(l_Info.m_pszName);
+      else
+         l_Info.m_pszName = NULL;
+
+      // Получение данных Device API
+      if(l_u8Flags & IRIDIUM_REQUEST_FLAG_DEVICE_API)
+      {
+         m_pInMessage->GetU16LE(l_Info.m_u16SubdeviceID);
+         m_pInMessage->GetU8(l_Info.m_u8FunctionID);
+         m_pInMessage->GetU8(l_Info.m_u8GroupID);
+      }
+      else
+      {
+         l_Info.m_u16SubdeviceID = 0;
+         l_Info.m_u8FunctionID = 0;
+         l_Info.m_u8GroupID = 0;
+      }
+
+      // Получение значения канала обратной связи
       m_pInMessage->GetValue(l_Info.m_u8Type, l_Info.m_Value);
       // Отправка полученных данных родителю
       SetTagData(l_Info);
@@ -663,8 +901,13 @@ void CIridiumProtocol::ReceiveGetTagsResponse()
 void CIridiumProtocol::ReceiveGetTagsRequest()
 {
    bool l_bResult = true;
-   iridium_tag_info_t l_Tag;
-   size_t l_stPosition = ~0;//(size_t)-1;
+   u8 l_u8Flags = 0;
+   iridium_tag_info_t l_Data;
+   size_t l_stPosition = ~0;
+
+   // Чтение списка флагов
+   m_pInMessage->GetU8(l_u8Flags);
+   l_u8Flags &= IRIDIUM_REQUEST_FLAG_MASK;
 
    // Инициализация пакета ответа
    InitResponsePacket();
@@ -682,27 +925,47 @@ void CIridiumProtocol::ReceiveGetTagsRequest()
       // Обработка списка тегов
       for( ; l_stCurrent < l_stSize; l_stCurrent++)
       {
+         // Получение указателя на текущее положение в буфере
+         u8* l_pPtr = m_pOutMessage->GetPtr();
+
          // Получение данных тега
-         size_t l_stLen = GetTagData(l_stCurrent, l_Tag, sizeof(l_Tag));
+         size_t l_stLen = GetTagData(l_stCurrent, l_Data, sizeof(l_Data));
          if(l_stLen)
          {
-            l_stPosition = ~0;//(size_t)-1;
-            // Проверка свободного места в буфере для помещения данных канала обратной связи, иначе остановка добавления данных
-            if(m_pOutMessage->Free() > l_stLen)
+            l_stPosition = ~0;
+            // Запись данных тега
+            m_pOutMessage->AddU32LE(l_Data.m_u32ID);
+            // Проверка нужно ли добавлять имя канала
+            if(0 == (l_u8Flags & IRIDIUM_REQUEST_FLAG_WITHOUT_NAME))
             {
-               // Запись данных тега
-               m_pOutMessage->AddU32LE(l_Tag.m_u32ID);
 #if defined(IRIDIUM_MCU_AVR)
-               m_pOutMessage->AddStringFromFlash(l_Tag.m_pszName);
+               m_pOutMessage->AddStringFromFlash(l_Data.m_pszName);
 #else
-               m_pOutMessage->AddString(l_Tag.m_pszName);
+               m_pOutMessage->AddString(l_Data.m_pszName);
 #endif
-               m_pOutMessage->AddValue(l_Tag.m_u8Type, l_Tag.m_Value, l_stPosition, 0);
-               l_u16Count++;
-            } else
+            }
+            // Добавление данных Device API
+            if(l_u8Flags & IRIDIUM_REQUEST_FLAG_DEVICE_API)
+            {
+               m_pOutMessage->AddU16LE(l_Data.m_u16SubdeviceID);
+               m_pOutMessage->AddU8(l_Data.m_u8FunctionID);
+               m_pOutMessage->AddU8(l_Data.m_u8GroupID);
+            }
+            // Добавление значения канала обратной связи
+            m_pOutMessage->AddValue(l_Data.m_u8Type, l_Data.m_Value, l_stPosition, 0);
+
+            // Проверка поместились ли данные канала в буфер
+            if(!m_pOutMessage->Result())
+            {
+               // Если данные канала не влезли, востанавливаем положение в буфере до помещения данных в буфер
+               m_pOutMessage->SetPtr(l_pPtr);
                break;
+            } else
+               l_u16Count++;
          }
       }
+      // Добавление флагов
+      l_u16Count = l_u16Count & ~(IRIDIUM_REQUEST_FLAG_MASK << 8) | l_u8Flags << 8;
       // Установка флага конца цепочки
       m_OutMH.m_Flags.m_bEnd = (l_stCurrent == l_stSize);
       // Обновим количество тегов
@@ -803,7 +1066,7 @@ void CIridiumProtocol::ReceiveLinkTagAndVariableRequest()
             m_pInMessage->GetU16LE(l_u16Variable);
 
          // Проверка возможности изменения значения
-         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, &l_u32ID);
+         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, 0);
          if(l_s8Result > 0)
          {
             // Связывание канала обратной связи и глобальной переменной
@@ -913,7 +1176,7 @@ void CIridiumProtocol::ReceiveGetTagDescriptionRequest()
 bool CIridiumProtocol::SendSetTagValueRequest(iridium_address_t in_DstAddr, u32 in_u32TagID, u8 in_u8Type, universal_value_t& in_rValue)
 {
    bool l_bResult = true;
-   size_t l_stRemain = ~0;//(size_t)-1;
+   size_t l_stRemain = ~0;
    // Инициализация адресного запроса
    InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_SET_TAG_VALUE);
 
@@ -1044,7 +1307,7 @@ void CIridiumProtocol::ReceiveGetTagValueRequest()
    {
       // Получение индекса канала обратной связи
       size_t l_stIndex = GetTagIndex(l_u32ID);
-      if(l_stIndex != ~0)//(size_t)-1)
+      if(l_stIndex != ~0)
       {
          // Получение данных канала обратной связи
          if(GetTagData(l_stIndex, l_Tag, sizeof(l_Tag)))
@@ -1065,7 +1328,7 @@ void CIridiumProtocol::ReceiveGetTagValueRequest()
 */
 bool CIridiumProtocol::SendGetTagValueResponse(u32 in_u32TagID, iridium_tag_info_t& in_rInfo)
 {
-   size_t l_stRemain = ~0;//(size_t)-1;
+   size_t l_stRemain = ~0;
 
    // Инициализация пакета ответа
    InitResponsePacket();
@@ -1094,11 +1357,19 @@ bool CIridiumProtocol::SendGetTagValueResponse(u32 in_u32TagID, iridium_tag_info
 /**
    Отправка запроса на получение списка тегов
    на входе    :  in_DstAddr  - адрес получателя
+                  in_u8Flags  - список флагов
    нв выходе   :  успешность
 */
-bool CIridiumProtocol::SendGetChannelsRequest(iridium_address_t in_DstAddr)
+bool CIridiumProtocol::SendGetChannelsRequest(iridium_address_t in_DstAddr, u8 in_u8Flags)
 {
-   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNELS);
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_CHANNELS);
+   // Начало работы с пакетом
+   Begin();
+   // Добавление списка флагов
+   m_pOutMessage->AddU8(in_u8Flags & IRIDIUM_REQUEST_FLAG_MASK);
+   // Окончание работы и отправка пакета
+   return End();
 }
 
 /**
@@ -1108,22 +1379,42 @@ bool CIridiumProtocol::SendGetChannelsRequest(iridium_address_t in_DstAddr)
 */
 void CIridiumProtocol::ReceiveGetChannelsResponse()
 {
-   u16 l_u16Channels = 0;
+   u8 l_u8Flags = 0;
+   u16 l_u16Count = 0;
    iridium_channel_info_t l_Info;
    memset(&l_Info, 0, sizeof(iridium_channel_info_t));
 
    // Получение количества тегов
-   m_pInMessage->GetU16LE(l_u16Channels);
+   m_pInMessage->GetU16LE(l_u16Count);
+   // Получение списка флагов
+   l_u8Flags = (l_u16Count >> 8) & IRIDIUM_REQUEST_FLAG_MASK;
+   l_u16Count &= ~(IRIDIUM_REQUEST_FLAG_MASK << 8);
 
    // Чтение списка тегов
-   for(u16 i = 0; i < l_u16Channels; i++)
+   for(u16 i = 0; i < l_u16Count; i++)
    {
-      // Получение идентификатора и имени канала
+      // Получение идентификатора
       m_pInMessage->GetU32LE(l_Info.m_u32ID);
-      m_pInMessage->GetString(l_Info.m_pszName);
-
+      // Получение имени устройства
+      if(0 == (l_u8Flags & IRIDIUM_REQUEST_FLAG_WITHOUT_NAME))
+         m_pInMessage->GetString(l_Info.m_pszName);
+      else
+         l_Info.m_pszName = NULL;
+      // Получение данных Device API
+      if(l_u8Flags & IRIDIUM_REQUEST_FLAG_DEVICE_API)
+      {
+         m_pInMessage->GetU16LE(l_Info.m_u16SubdeviceID);
+         m_pInMessage->GetU8(l_Info.m_u8FunctionID);
+         m_pInMessage->GetU8(l_Info.m_u8GroupID);
+      }
+      else
+      {
+         l_Info.m_u16SubdeviceID = 0;
+         l_Info.m_u8FunctionID = 0;
+         l_Info.m_u8GroupID = 0;
+      }
       // Отправка родителю данных полученного канала управления
-      if(l_Info.m_pszName)
+      //if(l_Info.m_pszName)
          SetChannelData(l_Info);
    }
    if(m_InMH.m_Flags.m_bEnd)
@@ -1142,7 +1433,12 @@ void CIridiumProtocol::ReceiveGetChannelsResponse()
 void CIridiumProtocol::ReceiveGetChannelsRequest()
 {
    bool l_bResult = true;
-   iridium_channel_info_t l_Channel;
+   u8 l_u8Flags = 0;
+   iridium_channel_info_t l_Data;
+
+   // Чтение списка флагов
+   m_pInMessage->GetU8(l_u8Flags);
+   l_u8Flags &= IRIDIUM_REQUEST_FLAG_MASK;
 
    // Инициализация пакета ответа
    InitResponsePacket();
@@ -1162,24 +1458,43 @@ void CIridiumProtocol::ReceiveGetChannelsRequest()
       // Обработка списка каналов управления
       for( ; l_stCurrent < l_stSize; l_stCurrent++)
       {
+         u8* l_pPtr = m_pOutMessage->GetPtr();
+
          // Получение данных канала управления
-         size_t l_stLen = GetChannelData(l_stCurrent, l_Channel);
+         size_t l_stLen = GetChannelData(l_stCurrent, l_Data);
          if(l_stLen)
          {
-            if(m_pOutMessage->Free() > l_stLen)
+            // Добавление идентицикатора канала
+            m_pOutMessage->AddU32LE(l_Data.m_u32ID);
+            // Добавление имени канала
+            if(0 == (l_u8Flags & IRIDIUM_REQUEST_FLAG_WITHOUT_NAME))
             {
-               // Запись данных тега
-               m_pOutMessage->AddU32LE(l_Channel.m_u32ID);
 #if defined(IRIDIUM_MCU_AVR)
-               m_pOutMessage->AddStringFromFlash(l_Channel.m_pszName);
+               m_pOutMessage->AddStringFromFlash(l_Data.m_pszName);
 #else
-               m_pOutMessage->AddString(l_Channel.m_pszName);
+               m_pOutMessage->AddString(l_Data.m_pszName);
 #endif
-               l_u16Count++;
-            } else
+            }
+
+            // Добавление данных Device API
+            if(l_u8Flags & IRIDIUM_REQUEST_FLAG_DEVICE_API)
+            {
+               m_pOutMessage->AddU16LE(l_Data.m_u16SubdeviceID);
+               m_pOutMessage->AddU8(l_Data.m_u8FunctionID);
+               m_pOutMessage->AddU8(l_Data.m_u8GroupID);
+            }
+            // Проверка поместились ли данные канала в буфер
+            if(!m_pOutMessage->Result())
+            {
+               // Если данные канала не влезли, востанавливаем положение в буфере до помещения данных в буфер
+               m_pOutMessage->SetPtr(l_pPtr);
                break;
+            } else
+               l_u16Count++;
          }
       }
+      // Добавление флагов
+      l_u16Count = l_u16Count & ~(IRIDIUM_REQUEST_FLAG_MASK << 8) | l_u8Flags << 8;
       // Установка флага конца цепочки
       m_OutMH.m_Flags.m_bEnd = (l_stCurrent == l_stSize);
       // Запись количества каналов
@@ -1207,7 +1522,7 @@ void CIridiumProtocol::ReceiveGetChannelsRequest()
 */
 bool CIridiumProtocol::SendSetChannelValueRequest(iridium_address_t in_DstAddr, u32 in_u32ChannelID, u8 in_u8Type, universal_value_t& in_rValue, u32 in_u32PIN)
 {
-   size_t l_stRemain = ~0;//(size_t)-1;
+   size_t l_stRemain = ~0;
    // Инициализация адресного запроса
    InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_SET_CHANNEL_VALUE);
 
@@ -1393,7 +1708,7 @@ void CIridiumProtocol::ReceiveLinkChannelAndVariableRequest()
          }
 
          // Проверка возможности изменения значения
-         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, &l_u32ID);
+         s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_TEST_PIN, l_u32PIN, 0);
          if(l_s8Result > 0)
          {
             // Связывание канала управления со списком глобальных переменных
@@ -1570,7 +1885,7 @@ void CIridiumProtocol::ReceiveGetChannelValueRequest()
 
       // Получение индекса канала управления
       size_t l_stIndex = GetChannelIndex(l_u32ID);
-      if(l_stIndex != ~0)//(size_t)-1)
+      if(l_stIndex != ~0)
       {
          // Проверка PIN кода
          s8 l_s8Result = CheckOperation(IRIDIUM_OPERATION_READ_CHANNEL, l_u32PIN, &l_u32ID);
@@ -1600,7 +1915,7 @@ void CIridiumProtocol::ReceiveGetChannelValueRequest()
 */
 bool CIridiumProtocol::SendGetChannelValueResponse(u32 in_u32ChannelID, iridium_channel_info_t& in_rInfo)
 {
-   size_t l_stRemain = ~0;//(size_t)-1;
+   size_t l_stRemain = ~0;
 
    // Инициализация пакета ответа
    InitResponsePacket();
@@ -1701,6 +2016,8 @@ void CIridiumProtocol::ReceiveStreamOpenRequest()
       // Получение режима открытия потока
       if(m_pInMessage->GetU8(l_u8Mode))
       {
+         // Получение режима открытия потока
+         l_u8Mode &= 0x3;
          // Получение пина, если таковой есть
          if(m_pInMessage->Size() >= sizeof(u32))
             m_pInMessage->GetU32LE(l_u32PIN);
@@ -1937,6 +2254,721 @@ bool CIridiumProtocol::SendStreamCloseResponse(u8 in_u8StreamID)
 
 #endif   // #if defined(IRIDIUM_CONFIG_STREAM_CLOSE_SLAVE)
 
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+// Работа со сценариями
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+
+#if defined(IRIDIUM_CONFIG_GET_SCENARIOS_MASTER)
+/**
+   Отправка запроса на получения списка сценариев
+   на входе    :  in_DstAddr  - адрес получателя
+   на выходе   :  успешность отправки запроса
+*/
+bool CIridiumProtocol::SendGetScenariosRequest(iridium_address_t in_DstAddr)
+{
+   return SendRequest(false, in_DstAddr, IRIDIUM_MESSAGE_GET_SCENARIOS);
+}
+
+/**
+   Получение ответа на запрос получения списка сценариев
+   на входе    :  *
+   на выходе   :  *
+*/
+void CIridiumProtocol::ReceiveGetScenariosResponse()
+{
+   u8 l_u8Count = 0;
+
+   // Получение количества сценариев
+   m_pInMessage->GetU8(l_u8Count);
+   // Получение указателя на список сценариев
+   u8* l_pPtr = m_pInMessage->GetDataPtr();
+   // Оповещение устройства о списке сценариев
+   SetScenarios(l_u8Count, l_pPtr);
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_GET_SCENARIOS_MASTER)
+
+#if defined(IRIDIUM_CONFIG_GET_SCENARIOS_SLAVE)
+/**
+   Получение запроса на получения списка сценариев
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveGetScenariosRequest()
+{
+   u8 l_u8Size = 0;
+   u8* l_pArray = NULL;
+   // Инициализация пакета ответа
+   InitResponsePacket();
+   // Начало работы с пакетом
+   Begin();
+   // Резервирование места под размер 
+   u8* l_pAnchor = m_pOutMessage->CreateAnchor(1);
+   // Получение количества каналов
+   if(GetScenarios(l_u8Size, l_pArray))
+   {
+      // Проверка параметров
+      if(l_u8Size && l_pArray)
+      {
+         // Добавление данных
+         m_pOutMessage->AddData(l_pArray, l_u8Size);
+      }
+   }
+   // Запись количества сценариев
+   m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u8Size, 1);
+   // Окончание работы и отправка пакета
+   End();
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_GET_SCENARIOS_SLAVE)
+
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_MASTER)
+/**
+   Отправка запроса на получения списка действий сценария
+   на входе    :  in_DstAddr     - адрес получателя
+                  in_u8Scenario  - номер сценария для котороно надо получить данные
+   на выходе   :  успешность отправки запроса
+*/
+bool CIridiumProtocol::SendGetScenarioActionsRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario)
+{
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_SCENARIO_ACTIONS);
+   // Начало работы с пакетом
+   Begin();
+   // Добавление номера сценария
+   m_pOutMessage->AddU8(in_u8Scenario);
+   // Окончание работы и отправка пакета
+   return End();
+}
+
+/**
+   Получение ответа на запрос на получения списка действий сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveGetScenarioActionsResponse()
+{
+   u8 l_u8Size = 0;
+   u8 l_u8Action = 0;
+   u8 l_u8Scenario = 0;
+   iridium_scenario_action_t l_Data;
+
+   m_eError = IRIDIUM_PROTOCOL_CORRUPT;
+
+   // Получение номера сценария
+   if(m_pInMessage->GetU8(l_u8Scenario))
+   {
+      // Получение количества действий
+      if(m_pInMessage->GetU8(l_u8Size))
+      {
+         // Чтение списка данных 
+         for(u8 i = 0; i < l_u8Size; i++)
+         {
+            // Получение номера действия
+            m_pInMessage->GetU8(l_u8Action);
+            // Получение идентификатора канала
+            m_pInMessage->GetU32LE(l_Data.m_u32ID);
+            // Получение значения
+            m_pInMessage->GetValue(l_Data.m_u8Type, l_Data.m_Value);
+            // Установка данных действия
+            SetScenarioActionData(l_u8Scenario, l_u8Action, l_Data);
+            m_eError = IRIDIUM_OK;
+         }
+      }
+   }
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_MASTER)
+
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_SLAVE)
+/**
+   Получение запроса на получения списка действий сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveGetScenarioActionsRequest()
+{
+   bool l_bResult = true;
+   u8 l_u8Scenario = 0;
+   iridium_scenario_action_t l_Data;
+
+   // Чтение сценария
+   m_pInMessage->GetU8(l_u8Scenario);
+
+   // Инициализация пакета ответа
+   InitResponsePacket();
+
+   // Получение количества каналов
+   u8 l_u8Size = GetScenarioActions(l_u8Scenario);
+   u8 l_u8Current = 0;
+   while(l_bResult && l_u8Current < l_u8Size)
+   {
+      // Количество каналов управления в пакете
+      u8 l_u8Count = 0;
+      // Начало работы с пакетом
+      Begin();
+
+      // Добавление номера сценария
+      m_pOutMessage->AddU8(l_u8Scenario);
+      // Создание точки для записи количества каналов
+      u8* l_pAnchor = m_pOutMessage->CreateAnchor(1);
+      // Обработка списка каналов управления
+      for( ; l_u8Current < l_u8Size; l_u8Current++)
+      {
+         u8* l_pPtr = m_pOutMessage->GetPtr();
+         size_t l_stRemain = ~0;
+
+         // Получение данных канала управления
+         if(GetScenarioActionData(l_u8Scenario, l_u8Current, l_Data))
+         {
+            // Добавление номера действия
+            m_pOutMessage->AddU8(l_u8Current);
+            // Добавление идентицикатора канала
+            m_pOutMessage->AddU32LE(l_Data.m_u32ID);
+            // Добавление значения действия
+            m_pOutMessage->AddValue(l_Data.m_u8Type, l_Data.m_Value, l_stRemain, 0);
+
+            // Проверка поместились ли данные канала в буфер
+            if(!m_pOutMessage->Result())
+            {
+               // Если данные канала не влезли, востанавливаем положение в буфере до помещения данных в буфер
+               m_pOutMessage->SetPtr(l_pPtr);
+               break;
+            } else
+               l_u8Count++;
+         }
+      }
+      // Установка флага конца цепочки
+      m_OutMH.m_Flags.m_bEnd = (l_u8Current == l_u8Size);
+      // Запись количества каналов
+      m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u8Count, 1);
+      // Окончание работы и отправка пакета
+      l_bResult = End();
+   }
+   // Проверка на наличие ошибки
+   if(!l_bResult)
+      m_eError = IRIDIUM_UNKNOWN_ERROR;
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_SLAVE)
+
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_MASTER)
+/**
+   Отправка запроса на изменение списка действий сценария
+   на входе    :  in_DstAddr     - адрес получателя
+                  in_u8Scenario  - номер сценария для котороно надо получить данные
+                  in_u8Count     - количество действий
+                  in_pActions    - указатель на данные действий
+   на выходе   :  успешность отправки запроса
+*/
+bool CIridiumProtocol::SendSetScenarioActionsRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario, u8 in_u8Count, iridium_scenario_action_t* in_pActions)
+{
+   bool l_bResult = true;
+   u8 l_u8Scenario = 0;
+   iridium_scenario_action_t l_Data;
+
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_SET_SCENARIO_ACTIONS);
+
+   // Получение количества каналов
+   u8 l_u8Current = 0;
+   while(l_bResult && l_u8Current < in_u8Count)
+   {
+      // Количество каналов управления в пакете
+      u8 l_u8Count = 0;
+      // Начало работы с пакетом
+      Begin();
+
+      // Добавление номера сценария
+      m_pOutMessage->AddU8(l_u8Scenario);
+      // Создание точки для записи количества каналов
+      u8* l_pAnchor = m_pOutMessage->CreateAnchor(1);
+      // Обработка списка каналов управления
+      for( ; l_u8Current < in_u8Count; l_u8Current++)
+      {
+         u8* l_pPtr = m_pOutMessage->GetPtr();
+         size_t l_stRemain = ~0;
+
+         // Добавление номера действия
+         m_pOutMessage->AddU8(l_u8Current);
+         // Добавление идентицикатора канала
+         m_pOutMessage->AddU32LE(l_Data.m_u32ID);
+         // Добавление значения действия
+         m_pOutMessage->AddValue(l_Data.m_u8Type, l_Data.m_Value, l_stRemain, 0);
+
+         // Проверка поместились ли данные канала в буфер
+         if(!m_pOutMessage->Result())
+         {
+            // Если данные канала не влезли, востанавливаем положение в буфере до помещения данных в буфер
+            m_pOutMessage->SetPtr(l_pPtr);
+            break;
+         } else
+            l_u8Count++;
+      }
+      // Установка флага конца цепочки
+      m_OutMH.m_Flags.m_bEnd = (l_u8Current == in_u8Count);
+      // Запись количества каналов
+      m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u8Count, 1);
+      // Окончание работы и отправка пакета
+      l_bResult = End();
+   }
+   return l_bResult;
+}
+
+/**
+   Получение ответа на запрос изменения списка действий сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveSetScenarioActionsResponse()
+{
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_MASTER)
+
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_SLAVE)
+/**
+   Получение запроса на изменение списка действий сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveSetScenarioActionsRequest()
+{
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_SLAVE)
+
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_MASTER)
+/**
+   Отправка запроса на получение списка переменных сценария
+   на входе    :  in_DstAddr     - адрес получателя
+                  in_u8Scenario  - номер сценария для котороно надо получить данные
+   на выходе   :  успешность отправки запроса
+*/
+bool CIridiumProtocol::SendGetScenarioVariablesRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario)
+{
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_GET_SCENARIO_VARIABLES);
+   // Начало работы с пакетом
+   Begin();
+   // Добавление номера сценария
+   m_pOutMessage->AddU8(in_u8Scenario);
+   // Окончание работы и отправка пакета
+   return End();
+}
+
+/**
+   Получение ответа на запрос получения списка переменных сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveGetScenarioVariablesResponse()
+{
+   u8 l_u8Scenario = 0;
+   u8 l_u8Count = 0;
+   u16 l_aVariables[IRIDIUM_MAX_VARIABLES];
+
+   // Получение сценария
+   if(m_pInMessage->GetU8(l_u8Scenario))
+   {
+      // Получение количества переменых связанных с сценарием
+      if(m_pInMessage->GetU8(l_u8Count))
+      {
+         // Получение списка глобальных переменных
+         for(u8 i = 0; i < l_u8Count; i++)
+            m_pInMessage->GetU16LE(l_aVariables[i]);
+         // Оповещение устройства о списке переменных
+         SetScenarioVariables(l_u8Scenario, l_u8Count, l_aVariables);
+      }
+   }
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_MASTER)
+
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_SLAVE)
+/**
+   Получение запроса на получения списка переменных сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveGetScenarioVariablesRequest()
+{
+   u8 l_u8Scenario = 0;
+   u8 l_u8Size = 0;
+   u8 l_u8Count = 0;
+   u16* l_pArray = NULL;
+
+   m_eError = IRIDIUM_PROTOCOL_CORRUPT;
+
+   // Получение номера сценария
+   if(m_pInMessage->GetU8(l_u8Scenario))
+   {
+      // Инициализация пакета ответа
+      InitResponsePacket();
+      // Начало работы с пакетом
+      Begin();
+      // Добавление номера сценария
+      m_pOutMessage->AddU8(l_u8Scenario);
+      // Резервирование места под размер 
+      u8* l_pAnchor = m_pOutMessage->CreateAnchor(1);
+      // Получение количества переменных
+      if(GetScenarioVariables(l_u8Scenario, l_u8Size, l_pArray))
+      {
+         // Проверка параметров
+         if(l_u8Size && l_pArray)
+         {
+            // Добавление данных
+            for(u8 i = 0; i < l_u8Size; i++) 
+            {
+               if(l_pArray[i])
+               {
+                  m_pOutMessage->AddU16LE(l_pArray[i]);
+                  l_u8Count++;
+               }
+            }
+         }
+      }
+      // Запись количества сценариев
+      m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u8Count, 1);
+      // Окончание работы и отправка пакета
+      End();
+   }
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_SLAVE)
+
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_VARIABLES_MASTER)
+/**
+   Отправка запроса на изменение списка переменных сценария
+   на входе    :  in_DstAddr     - адрес получателя
+                  in_u8Scenario  - номер сценария для котороно надо получить данные
+                  in_u8Size      - количество глобальных переменных
+                  in_pVariables  - указатель на список глобальных переменных
+   на выходе   :  успешность отправки запроса
+*/
+bool CIridiumProtocol::SendSetScenarioVariablesRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario, u8 in_u8Size, u16* in_pVariables)
+{
+   u8 l_u8Count = 0;
+   // Инициализация адресного запроса
+   InitRequestPacket(false, in_DstAddr, IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES);
+   // Начало работы с пакетом
+   Begin();
+   // Добавление номера сценария
+   m_pOutMessage->AddU8(in_u8Scenario);
+   // Резервирование места под размер 
+   u8* l_pAnchor = m_pOutMessage->CreateAnchor(1);
+   // Проверка входных параметров
+   if(in_u8Size && in_pVariables)
+   {
+      // Добавление данных
+      for(u8 i = 0; i < in_u8Size; i++)
+      {
+         if(in_pVariables[i])
+         {
+            m_pOutMessage->AddU16LE(in_pVariables[i]);
+            l_u8Count++;
+         }
+      }
+   }
+   // Запись количества сценариев
+   m_pOutMessage->SetAnchorLE(l_pAnchor, &l_u8Count, 1);
+   // Окончание работы и отправка пакета
+   return End();
+}
+
+/**
+   Получение ответа на запрос изменения списка переменных сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveSetScenarioVariablesResponse()
+{
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SET_SCENARIO_VARIABLES_MASTER)
+
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_VARIABLES_SLAVE)
+/**
+   Получение запроса на изменение списка переменных сценария
+   на входе    :  *
+   на выходе   :  успешность отправки запроса
+*/
+void CIridiumProtocol::ReceiveSetScenarioVariablesRequest()
+{
+   u8 l_u8Size = 0;
+   u8 l_u8Scenario = 0;
+   u16 l_aVariables[IRIDIUM_MAX_VARIABLES];
+
+   m_eError = IRIDIUM_PROTOCOL_CORRUPT;
+   // Получение номера сценария
+   if(m_pInMessage->GetU8(l_u8Scenario))
+   {
+      // Получение количества перменных
+      if(m_pInMessage->GetU8(l_u8Size))
+      {
+         // Чтение списка переменных
+         for(u8 i = 0; i < l_u8Size; i++)
+            m_pInMessage->GetU16LE(l_aVariables[i]);
+         // Оповещение устройства о полученных переменных сценария
+         SetScenarioVariables(l_u8Scenario, l_u8Size, l_aVariables);
+         m_eError = IRIDIUM_OK;
+      }
+   }
+}
+
+#endif   // #if defined(IRIDIUM_CONFIG_SET_SCENARIO_VARIABLES_SLAVE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#if defined(IRIDIUM_CONFIG_SCENARIO_SLAVE)
+/**
+   Получение запроса получения списка сценариев
+   на входе    :  
+   на выходе   :  
+*/
+u8 CIridiumProtocol::ReceiveGetScenarioRequest()
+{
+   SendGetScenarioResponse(m_InMH.m_u16TID, GetScenario());
+   return 0;
+}
+/**
+   Получение ответа на запрос получения данных сценария
+   на входе    :  
+   на выходе   :  
+*/
+bool CIridiumProtocol::ReceiveGetScenarioActionsRequest()
+{
+   u8 l_u8ScenarioReq;
+   iridium_scenario_action_t* l_aScenarios;
+   size_t l_stSize;
+   // Получаем идентификатор сценария, который запрошен
+   m_pInMessage->GetU8(l_u8ScenarioReq);
+   // Получаем информацию о данных запрошенного сценария
+   GetScenarioActions(l_u8ScenarioReq, l_aScenarios, l_stSize);
+   // Отправка ответа на запрос получения данных сценария
+	SendGetScenarioActionsResponse(m_InMH.m_u16TID, l_aScenarios, l_stSize);
+   return false;
+}
+/**
+   Получение ответа на запрос изменения данных сценария
+   на входе    :  
+   на выходе   :  
+*/
+bool CIridiumProtocol::ReceiveSetScenarioActionsRequest()
+{
+   u8 l_u8ScenarioReq;
+   u32* u32_pSrc;
+   u16 l_stSize;
+   // Получаем идентификатор сценария, который нужно изменить
+   m_pInMessage->GetU8(l_u8ScenarioReq);
+   // Получение указателя на данные сценария
+   m_pInMessage->GetU32LE(*u32_pSrc);
+   // Получение длины данных сценария
+   m_pInMessage->GetU16LE(l_stSize);
+   // Изменение действий сценария
+   SetScenarioActions(l_u8ScenarioReq, (iridium_scenario_action_t*)u32_pSrc, l_stSize);
+   // Ответ на запрос изменения списка действий сценария
+	SendSetScenarioActionsResponse(m_InMH.m_u16TID);
+
+   return false;
+}
+
+/**
+   Получение ответа на запрос получения списка глобальных переменных сценария
+   на входе    :  
+   на выходе   :  
+*/
+bool CIridiumProtocol::ReceiveGetScenarioVariablesRequest()
+{
+   u8 l_u8ScenarioReq;
+   u16* l_aVariables;
+   size_t l_stSize;
+   // Получаем идентификатор сценария, который запрошен
+   m_pInMessage->GetU8(l_u8ScenarioReq);
+   // Получаем информацию о глобальных переменных запрошенного сценария
+   GetScenarioVariables(l_u8ScenarioReq, l_aVariables, l_stSize);
+   // Отправка ответа на запрос получения глобальных перменных сценария
+	SendGetScenarioVariablesResponse(m_InMH.m_u16TID, l_aVariables, l_stSize);
+   return false;
+}
+
+/**
+   Получение ответа на запрос изменения списка глобальных переменных сценария
+   на входе    :  
+   на выходе   :  
+*/
+bool CIridiumProtocol::ReceiveSetScenarioVariablesRequest()
+{
+   u8 l_u8ScenarioReq;
+   u32* u32_pSrc;
+   u16 l_stSize;
+   // Получаем идентификатор сценария, глобальные переменные которого нужно изменить
+   m_pInMessage->GetU8(l_u8ScenarioReq);
+   // Получение указателя на список глобальных переменных сценария
+   m_pInMessage->GetU32LE(*u32_pSrc);
+   // Получение длины списка глобальных переменных сценария
+   m_pInMessage->GetU16LE(l_stSize);
+   // Изменение действий сценария
+   SetScenarioVariables(l_u8ScenarioReq, (u16*)u32_pSrc, l_stSize);
+   // Ответ на запрос изменения списка действий сценария
+	SendSetScenarioVariablesResponse(m_InMH.m_u16TID);
+   return false;
+}
+
+/**
+   Отправка ответа на запрос получения количества сценариев
+   на входе    :  in_u16TID      - идентифкатор транзакции
+                  in_u8Scenarios - количество сценариев
+   на выходе   :  успешность
+*/
+bool CIridiumProtocol::SendGetScenarioResponse(u16 in_u16TID, u8 in_u8Scenarios)
+{
+   // Инициализация пакета с ответом
+   InitResponsePacket();
+
+   // Заполнение заголовка сообщения
+   m_OutMH.m_Flags.m_bNoTID      = (0 == in_u16TID);
+   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_GET_SCENARIOS);
+   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_GET_SCENARIOS;
+   m_OutMH.m_u16TID              = in_u16TID;
+   // Начало работы с пакетом
+   Begin();
+   // Добавление информации об устройстве в поток
+   m_pOutMessage->AddU8(in_u8Scenarios);
+   // Окончание работы и отправка пакета
+   return End();
+}
+/**
+   Отправка ответа на запрос получения данных сценария
+   на входе    :  in_u16TID      - идентифкатор транзакции
+                  out_rActions   - ссылка на переменную с указателем на массив действий сценария
+                  out_rSize      - размер
+   на выходе   :  успешность
+*/
+bool CIridiumProtocol::SendGetScenarioActionsResponse(u16 in_u16TID, iridium_scenario_action_t*& out_rActions, size_t& out_rSize)
+{
+   // Инициализация пакета с ответом
+   InitResponsePacket();
+   // Заполнение заголовка сообщения
+   m_OutMH.m_Flags.m_bNoTID      = (0 == in_u16TID);
+   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_GET_SCENARIO_ACTIONS);
+   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_GET_SCENARIO_ACTIONS;
+   m_OutMH.m_u16TID              = in_u16TID;
+   // Начало работы с пакетом
+   Begin();
+   m_pOutMessage->AddData(out_rActions, out_rSize);
+   return End();
+}
+
+/**
+   Отправка ответа на запрос изменения данных сценария
+   на входе    :  in_u16TID      - идентифкатор транзакции
+                  in_u8Scenarios - количество сценариев
+   на выходе   :  успешность
+*/
+bool CIridiumProtocol::SendSetScenarioActionsResponse(u16 in_u16TID)
+{
+   // Инициализация пакета с ответом
+   InitResponsePacket();
+   // Заполнение заголовка сообщения
+   m_OutMH.m_Flags.m_bNoTID      = (0 == in_u16TID);
+   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SET_SCENARIO_ACTIONS);
+   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SET_SCENARIO_ACTIONS;
+   m_OutMH.m_u16TID              = in_u16TID;
+   // Начало работы с пакетом
+   Begin();
+   return End();
+}
+
+/**
+   Отправка ответа на запрос получения списка глобальных переменных сценария
+   на входе    :  in_u16TID      - идентифкатор транзакции
+                  in_pVariables  - указатель на массив глобальных переменных связзанных с сценарием
+                  in_stSize      - количестве глобальных переменных связанных с сценарием
+   на выходе   :  успешность
+   примечание  :  Формат исходящих данных
+                  +0 u8 [E][R][R][N][N][N][N][N]
+                     E  - Флаг влючения сценария
+                     R  - Зарезервировано
+                     N  - коллчество глобальных переменных
+
+                  +1 u16*N массив идентиифкаторов глобальных переменных
+*/
+bool CIridiumProtocol::SendGetScenarioVariablesResponse(u16 in_u16TID, u16* in_pVariables, size_t in_stSize)
+{
+   u8 l_u8Flags = 0;
+   u8 l_u8Count = 0;
+
+   // Инициализация пакета с ответом
+   InitResponsePacket();
+   // Заполнение заголовка сообщения
+   m_OutMH.m_Flags.m_bNoTID      = (0 == in_u16TID);
+   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_GET_SCENARIO_VARIABLES);
+   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_GET_SCENARIO_VARIABLES;
+   m_OutMH.m_u16TID              = in_u16TID;
+
+   // Начало работы с пакетом
+   Begin();
+
+   // Зарезервируем байт флага в потоке
+   u8* l_pFlags = m_pOutMessage->CreateAnchor(sizeof(u8));
+   
+   // Добавляем глоблальные переменные из списка
+   for(u8 i = 0; i < IRIDIUM_MAX_VARIABLES; i++)
+   {
+      // Если глобальная переменная не 0, добавим в поток
+      if(in_pVariables[i])
+      {
+         m_pOutMessage->AddU16LE(in_pVariables[i]);
+         l_u8Count++;
+      }
+   }
+   // Формирование флага
+   l_u8Flags |= 0x80;
+   l_u8Flags |= (l_u8Count & 0x1F);
+
+   // Сохраним флага с колличество глобальных переменных
+   m_pOutMessage->SetAnchorLE(l_pFlags, &l_u8Flags, sizeof(u8));
+
+   // Окончание работы с пакетом
+   return End(); 
+}
+
+/**
+   Отправка ответа на запрос изменения списка глобальных переменных сценария
+   на входе    :  in_u16TID      - идентифкатор транзакции
+   на выходе   :  успешность
+*/
+bool CIridiumProtocol::SendSetScenarioVariablesResponse(u16 in_u16TID)
+{
+   // Инициализация пакета с ответом
+   InitResponsePacket();
+   // Заполнение заголовка сообщения
+   m_OutMH.m_Flags.m_bNoTID      = (0 == in_u16TID);
+   m_OutMH.m_Flags.m_u4Version   = GetMessageVersion(IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES);
+   m_OutMH.m_u8Type              = IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES;
+   m_OutMH.m_u16TID              = in_u16TID;
+   // Начало работы с пакетом
+   Begin();
+   return End();
+}
+#endif
+
 /**
    Начало формирования пакета
    на входе    :  *
@@ -2151,6 +3183,12 @@ void CIridiumProtocol::ProcessMessageRequest()
       ReceiveSmartAPIRequest();
       break;
 #endif
+#if defined(IRIDIUM_CONFIG_SYSTEM_BLINK_SLAVE)
+   // Получение запроса мигания
+   case IRIDIUM_MESSAGE_SYSTEM_BLINK:
+      ReceiveBlinkRequest();
+      break;
+#endif
 
 #if defined(IRIDIUM_CONFIG_SET_VARIABLE_SLAVE)
    // Установка глобальной переменной
@@ -2162,6 +3200,12 @@ void CIridiumProtocol::ProcessMessageRequest()
    // Получение глобальной переменной
    case IRIDIUM_MESSAGE_GET_VARIABLE:
       ReceiveGetVariableRequest();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_DELETE_VARIABLES_SLAVE)
+      // Получение глобальной переменной
+   case IRIDIUM_MESSAGE_DELETE_VARIABLES:
+      ReceiveDeleteVariablesRequest();
       break;
 #endif
 
@@ -2246,6 +3290,36 @@ void CIridiumProtocol::ProcessMessageRequest()
       break;
 #endif
 
+#if defined(IRIDIUM_CONFIG_GET_SCENARIOS_SLAVE)
+   // Получение списка сценариев
+   case IRIDIUM_MESSAGE_GET_SCENARIOS:
+      ReceiveGetScenariosRequest();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_SLAVE)
+   // Получение списка действий сценария
+   case IRIDIUM_MESSAGE_GET_SCENARIO_ACTIONS:
+      ReceiveGetScenarioActionsRequest();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_SLAVE)
+   // Установка списка действий сценария
+   case IRIDIUM_MESSAGE_SET_SCENARIO_ACTIONS:
+      ReceiveSetScenarioActionsRequest();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_SLAVE)
+   // Получение списка переменных сценария
+   case IRIDIUM_MESSAGE_GET_SCENARIO_VARIABLES:
+      ReceiveGetScenarioVariablesRequest();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_VARIABLES_SLAVE)
+   // Установка списка переменных сценария
+   case IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES:
+      ReceiveSetScenarioVariablesRequest();
+      break;
+#endif
    // Неизвестное тип сообщения
    default:
       m_eError = IRIDIUM_UNKNOWN_MESSAGE;
@@ -2299,6 +3373,12 @@ void CIridiumProtocol::ProcessMessageResponse()
       ReceiveSmartAPIResponse();
       break;
 #endif
+#if defined(IRIDIUM_CONFIG_SYSTEM_BLINK_MASTER)
+   // Получение ответа на запрос мерцания
+   case IRIDIUM_MESSAGE_SYSTEM_BLINK:
+      ReceiveBlinkResponse();
+      break;
+#endif
 
 #if defined(IRIDIUM_CONFIG_SET_VARIABLE_MASTER)
    // Установка глобальной переменной
@@ -2310,6 +3390,12 @@ void CIridiumProtocol::ProcessMessageResponse()
    // Получение глобальной переменной
    case IRIDIUM_MESSAGE_GET_VARIABLE:
       ReceiveGetVariableResponse();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_DELETE_VARIABLES_MASTER)
+      // Получение глобальной переменной
+   case IRIDIUM_MESSAGE_DELETE_VARIABLES:
+      ReceiveDeleteVariablesResponse();
       break;
 #endif
 
@@ -2391,6 +3477,37 @@ void CIridiumProtocol::ProcessMessageResponse()
    // Закрытия потока
    case IRIDIUM_MESSAGE_STREAM_CLOSE:
       ReceiveStreamCloseResponse();
+      break;
+#endif
+
+#if defined(IRIDIUM_CONFIG_GET_SCENARIOS_MASTER)
+   // Получение списка сценариев
+   case IRIDIUM_MESSAGE_GET_SCENARIOS:
+      ReceiveGetScenariosResponse();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_MASTER)
+   // Получение списка действий сценария
+   case IRIDIUM_MESSAGE_GET_SCENARIO_ACTIONS:
+      ReceiveGetScenarioActionsResponse();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_MASTER)
+   // Установка списка действий сценария
+   case IRIDIUM_MESSAGE_SET_SCENARIO_ACTIONS:
+      ReceiveSetScenarioActionsResponse();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_MASTER)
+   // Получение списка переменных сценария
+   case IRIDIUM_MESSAGE_GET_SCENARIO_VARIABLES:
+      ReceiveGetScenarioVariablesResponse();
+      break;
+#endif
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_MASTER)
+   // Установка списка переменных сценария
+   case IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES:
+      ReceiveSetScenarioVariablesResponse();
       break;
 #endif
 
