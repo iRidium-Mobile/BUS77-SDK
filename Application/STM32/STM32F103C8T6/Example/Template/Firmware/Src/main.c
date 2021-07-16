@@ -81,7 +81,7 @@ extern void iRidiumDevice_Loop(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-/*
+
    // Установка приоритета
    __set_PRIMASK(1);
    // Установка вектора прерывания
@@ -90,7 +90,7 @@ int main(void)
    __set_PRIMASK(0);
    // Включение прерываний
    __enable_irq();
-*/
+
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
