@@ -27,6 +27,7 @@ typedef struct nvram_common_s
    u32   m_u32UserID;                              // Пользовательский идентификатор
    u16   m_u16Change;                              // Версия изменения
    char  m_szDeviceName[64];                       // Имя устройства
+   u32   m_u32BlinkTime;                           // Время мерцания светодиода
 } nvram_common_t;
    
 #endif   // _NVRAM_COMMON_H_INCLUDED_

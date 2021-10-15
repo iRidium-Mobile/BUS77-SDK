@@ -143,12 +143,15 @@ public:
    // Работа с каналами обратной связи
    // IRIDIUM_MESSAGE_GET_TAGS (0x20)
 #if defined(IRIDIUM_CONFIG_GET_TAGS_MASTER)
-   bool SendGetTagsRequest(iridium_address_t in_DstAddr, u8 in_u8Flags);
+   bool SendGetTagsRequest(iridium_address_t in_DstAddr, u8 in_u8Flags, u16 in_u16Start, u16 in_u16Count);
    void ReceiveGetTagsResponse();
 #endif
 
 #if defined(IRIDIUM_CONFIG_GET_TAGS_SLAVE)
    void ReceiveGetTagsRequest();
+#if 0 // TODO !!!
+   void ProcessGetTagsRequest();
+#endif
 #endif
 
    // IRIDIUM_MESSAGE_LINK_TAG_AND_VARIABLE (0x24)
@@ -196,12 +199,15 @@ public:
    // Работа с каналами управления
    // IRIDIUM_MESSAGE_GET_CHANNELS (0x30)
 #if defined(IRIDIUM_CONFIG_GET_CHANNELS_MASTER)
-   bool SendGetChannelsRequest(iridium_address_t in_DstAddr, u8 in_u8Flags);
+   bool SendGetChannelsRequest(iridium_address_t in_DstAddr, u8 in_u8Flags, u16 in_u16Start, u16 in_u16Count);
    void ReceiveGetChannelsResponse();
 #endif
 
 #if defined(IRIDIUM_CONFIG_GET_CHANNELS_SLAVE)
    void ReceiveGetChannelsRequest();
+#if 0 // TODO !!!
+   void ProcessGetChannelsRequest();
+#endif
 #endif
 
    // IRIDIUM_MESSAGE_SET_CHANNEL_VALUE (0x33)
@@ -293,67 +299,24 @@ public:
 #endif
 
    // IRIDIUM_MESSAGE_GET_SCENARIO_ACTIONS (0x61) Получение данных сценария
-#if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_MASTER)
-   bool SendGetScenarioActionsRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario);
-   void ReceiveGetScenarioActionsResponse();
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_MASTER)
+   bool SendGetScenarioRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario);
+   void ReceiveGetScenarioResponse();
 #endif
 
-#if defined(IRIDIUM_CONFIG_GET_SCENARIO_ACTIONS_SLAVE)
-   void ReceiveGetScenarioActionsRequest();
+#if defined(IRIDIUM_CONFIG_GET_SCENARIO_SLAVE)
+   void ReceiveGetScenarioRequest();
    bool SendGetScenarioActionsResponse();
 #endif
 
    // IRIDIUM_MESSAGE_SET_SCENARIO_ACTIONS (0x62) Изменение данных сценария
-#if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_MASTER)
-   bool SendSetScenarioActionsRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario, u8 in_u8Count, iridium_scenario_action_t* in_pActions);
-   void ReceiveSetScenarioActionsResponse();
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_MASTER)
+   bool SendSetScenarioRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario, u16 in_u16Variable, u8 in_u8Count, iridium_scenario_action_t* in_pActions);
+   void ReceiveSetScenarioResponse();
 #endif
 
-#if defined(IRIDIUM_CONFIG_SET_SCENARIO_ACTIONS_SLAVE)
-   void ReceiveSetScenarioActionsRequest();
-#endif
-
-   // IRIDIUM_MESSAGE_GET_SCENARIO_VARIABLES (0x63) Получение списка глобальных переменных сценария
-#if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_MASTER)
-   bool SendGetScenarioVariablesRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario);
-   void ReceiveGetScenarioVariablesResponse();
-#endif
-
-#if defined(IRIDIUM_CONFIG_GET_SCENARIO_VARIABLES_SLAVE)
-   void ReceiveGetScenarioVariablesRequest();
-#endif
-
-   // IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES (0x64) Изменение списка глобальных переменных сценария
-#if defined(IRIDIUM_CONFIG_SET_SCENARIO_VARIABLES_MASTER)
-   bool SendSetScenarioVariablesRequest(iridium_address_t in_DstAddr, u8 in_u8Scenario, u8 in_u8Size, u16* in_pVariables);
-   void ReceiveSetScenarioVariablesResponse();
-#endif
-
-#if defined(IRIDIUM_CONFIG_SET_SCENARIO_VARIABLES_SLAVE)
-   void ReceiveSetScenarioVariablesRequest();
-#endif
-
-#if defined(IRIDIUM_CONFIG_SCENARIO_SLAVE)
-
-   u8 ReceiveGetScenarioRequest();
-
-   bool ReceiveGetScenarioActionsRequest();
-
-   bool ReceiveSetScenarioActionsRequest();
-
-   bool ReceiveGetScenarioVariablesRequest();
-
-   bool ReceiveSetScenarioVariablesRequest();
-
-   bool SendGetScenarioResponse(u16 in_u16TID, u8 in_u8Scenarios);
-
-   bool SendGetScenarioActionsResponse(u16 in_u16TID, iridium_scenario_action_t*& out_rActions, size_t& out_rSize);
-
-   bool SendSetScenarioActionsResponse(u16 in_u16TID);
-
-   bool SendGetScenarioVariablesResponse(u16 in_u16TID, u16* in_pVariables, size_t in_stSize);
-
-   bool SendSetScenarioVariablesResponse(u16 in_u16TID);
+#if defined(IRIDIUM_CONFIG_SET_SCENARIO_SLAVE)
+   void ReceiveSetScenarioRequest();
 #endif
 
    // Установка адресации
@@ -392,6 +355,10 @@ public:
    // Обработка входящих сообщения
    virtual void ProcessMessageRequest();
    virtual void ProcessMessageResponse();
+
+#if 0 // TODO !!! доделать отложенную отправку
+   virtual bool Work();
+#endif
 
 #if defined(IRIDIUM_ENABLE_CIPHER)
    // Инициализация шифрования
@@ -481,7 +448,7 @@ public:
       { return 0; }
    virtual size_t GetTagIndex(u32 in_u32TagID)
       { return ~0; }
-   virtual void SetTagData(iridium_tag_info_t& in_rInfo)
+   virtual void SetTagData(size_t in_stIndex, iridium_tag_info_t& in_rInfo)
       { }
    virtual size_t GetTagData(size_t in_stIndex, iridium_tag_info_t& out_rInfo, size_t in_stSize)
       { return 0; }
@@ -491,6 +458,8 @@ public:
       { return false; }
    virtual bool LinkTagAndVariable(u32 in_u32TagID, bool in_bOwner, u16 in_u16Variable)
       { return false;  }
+   virtual bool SetTagMinMaxStepUnits(u32 in_u32TagID, u8 in_u8Type, universal_value_t& in_rMin, universal_value_t& in_rMax, universal_value_t& in_rStep, u16 in_u16Units)
+      { return false;  }
    virtual bool SetTagValue(u32 in_u32TagID, u8 in_u8Type, universal_value_t& in_rValue, u8 in_u8Flags)
       { return false; }
 
@@ -499,7 +468,7 @@ public:
       { return 0; }
    virtual size_t GetChannelIndex(u32 in_u32ChannelID)
       { return ~0; }
-   virtual void SetChannelData(iridium_channel_info_t& in_rInfo)
+   virtual void SetChannelData(size_t in_stIndex, iridium_channel_info_t& in_rInfo)
       { }
    virtual size_t GetChannelData(size_t in_stIndex, iridium_channel_info_t& out_rInfo)
       { return 0; }
@@ -507,8 +476,10 @@ public:
       { }
    virtual bool GetChannelDescription(u32 in_u32ChannelID, iridium_channel_description_t& out_rDescription)
       { return false; }
-   virtual bool LinkChannelAndVariable(u32 in_u32ChannelID, u8 in_u8Variables, u16* in_pVariables)
+   virtual bool LinkChannelAndVariable(u32 in_u32ChannelID, u8 in_u8MaxVariables, u8 in_u8Variables, u16* in_pVariables)
       { return false; }
+   virtual bool SetChannelMinMaxStepUnits(u32 in_u32TagID, u8 in_u8Type, universal_value_t& in_rMin, universal_value_t& in_rMax, universal_value_t& in_rStep, u16 in_u16Units)
+      { return false;  }
    virtual bool SetChannelValue(u32 in_u32ChannelID, u8 in_u8Type, universal_value_t& in_rValue, u8 in_u8Flags)
       { return false; }
 
@@ -525,25 +496,24 @@ public:
       { }
 
    // Работа со сценариями
-   // Получение/установка списка сценариев
-   virtual bool GetScenarios(u8& out_rCount, u8*& out_rArray)
-      { return false; }
-   virtual bool SetScenarios(u8 in_u8Count, u8* in_pArray)
-      { return false; }
-   // Получение количества действий сценария
-   virtual u8 GetScenarioActions(u8 in_u8Scenario)
+   // Получение количества сценариев
+   virtual u8 GetScenarios()
       { return 0; }
-   // Установка/получение списка действий сценария
-   virtual bool GetScenarioActionData(u8 in_u8Scenario, u8 in_u8Action, iridium_scenario_action_t& out_rData)
+   // Получение/установка данных сценария
+   virtual bool GetScenarioData(u8 in_u8ScenarioIndex, iridium_scenario_t& out_rData)
       { return false; }
-   virtual bool SetScenarioActionData(u8 in_u8Scenario, u8 in_u8Action, iridium_scenario_action_t& in_rData)
+   virtual bool SetScenarioData(u8 in_u8ScenarioIndex, iridium_scenario_t& in_rData)
       { return false; }
-   // Установка/получение списка глобальных переменных
-   virtual bool GetScenarioVariables(u8 in_u8Scenario, u8& out_rSize, u16*& out_rVariables)
+   // Установка/получение действий сценария
+   virtual bool GetScenarioActionData(u8 in_u8ScenarioIndex, u8 in_u8ActionIndex, iridium_scenario_action_t& out_rData)
       { return false; }
-   virtual bool SetScenarioVariables(u8 in_u8Scenario, u8 in_u8Count, u16* in_pVariables)
+   virtual bool SetScenarioActionData(u8 in_u8ScenarioIndex, u8 in_u8ActionIndex, iridium_scenario_action_t& in_rData)
       { return false; }
-
+/*
+   // Вывод отладки
+   virtual void PrintDebug(const char* in_pFormat, ...)
+      { }
+*/
 protected:
    // Вспомогательные функции
    u16 GetTID();
@@ -560,6 +530,10 @@ protected:
    // Получение адреса приемника
    iridium_address_t GetDstAddress()
       { return m_pInPH->m_DstAddr; }
+   u8 GetRoute()
+      { return m_pInPH->m_u8Route; }
+   bool GetSrcSeg()
+      { return m_pInPH->m_Flags.m_bSrcSeg; }
 
 protected:
    u16                        m_u16TID;            // Текущий идентификатор транзакции
@@ -579,5 +553,7 @@ protected:
    CIridiumCipher*            m_pCipher;           // Указатель на кодер/декодер
    u8                         m_u8Count;           // "Случайное" значение
 #endif   // defined(IRIDIUM_ENABLE_CIPHER)
+
 };
+
 #endif   // _C_IRIDIUM_PROTOCOL_H_INCLUDED_

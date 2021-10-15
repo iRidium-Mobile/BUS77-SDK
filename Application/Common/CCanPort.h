@@ -69,12 +69,13 @@ typedef struct can_ring_buffer_s
 
 } can_ring_buffer_t;
 
+typedef void (*access_callback_t)(void*, bool);
+
 /**
    Класс для хранения и управления списком com портов
 */
 class CCANPort
 {
-
 public:
    // Конструктор/деструктор
    CCANPort();
@@ -93,6 +94,9 @@ public:
    bool SetInBuffer(void* in_pBuffer, size_t in_stSize);
    // Установка параметров исходящего буфера
    bool SetOutBuffer(void* in_pBuffer, size_t in_stSize);
+
+   void SetAccessCallback(access_callback_t in_pCallback)
+      { m_pAccess = in_pCallback; }
 
    //////////////////////////////////////////////////////////////////////////
    // Получение данных из CAN шины
@@ -135,6 +139,8 @@ protected:
    u8                m_aPacketBuffer[8*33];        // Данные полученого пакета
    size_t            m_stPacketSize;               // Размер полученого пакета
    bool              m_bTransmite;                 // Флаг указывающий что происходит отправка буфера
+   access_callback_t m_pAccess;                    // Указатель на функцию дост
+   
 };
 #endif   // _C_CAN_PORT_H_INCLUDED_
 

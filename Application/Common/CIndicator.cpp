@@ -105,15 +105,15 @@ void CIndicator::SetColor(u8 in_u8Color)
 
 /**
    Установка времени мерцания
-   на входе    :  in_u32Time  - время мерцания в миллисекундах
+   на входе    :  in_u32Time  - время мерцания в миллисекундах (0 - мигать бесконечно, иначен время мигания)
    на выходе   :  *
 */
 void CIndicator::SetBlinkTime(u32 in_u32Time)
 {
-   // Сброс состония
+   // Сброс состояния
    Reset();
-
-   m_u32Blink = in_u32Time;
+   // Если значение равно 0, выставим время мигания в ~0 (бесконечность)
+   m_u32Blink = (0 == in_u32Time) ? ~0 : in_u32Time;
 }
 
 /**
@@ -141,9 +141,12 @@ void CIndicator::Work()
             Set(m_u8Color, m_u8Current);
             m_u8Old = m_u8Current;
          }
-      } else
+      // Проверка на бесконечность
+      } else if(m_u32Blink != ~0)
+      {
          m_u32Blink = 0;
-
+         m_u8Old = 0xFF;
+      }
    } else
    {
       if(m_u8Current != m_u8Old)

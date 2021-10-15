@@ -163,254 +163,12 @@ void CIridiumOutBuffer::AddDeviceInfo(iridium_device_info_t& in_rInfo)
 /**
    Добавление общего описания канала
    на входе    :  in_rDesc - ссылка на общее описание канала
-   на выходе   :  успешность
+   на выходе   :  *
 */
 void CIridiumOutBuffer::AddDescription(iridium_description_t& in_rDesc)
 {
-   u8 l_u8Type = 0;
-   u8 l_u8Flag = 0;
-
-   // Получение типа значения
-   l_u8Type = in_rDesc.m_u8Type;
-   u8* l_pAnchor = CreateAnchor(1);
-   if(l_pAnchor)
-   {
-      switch(l_u8Type)
-      {
-      // Неопределенный тип
-      case IVT_NONE:
-         break;
-      // Запись бинарных параметров
-      case IVT_BOOL:
-         l_u8Flag |= (in_rDesc.m_Min.m_bValue << 7);
-         l_u8Flag |= (in_rDesc.m_Max.m_bValue << 6);
-         l_u8Flag |= (in_rDesc.m_Step.m_bValue << 5);
-         break;
-
-      // Запись S8 параметров
-      case IVT_S8:
-         if(in_rDesc.m_Min.m_s8Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddS8(in_rDesc.m_Min.m_s8Value);
-         }
-         if(in_rDesc.m_Max.m_s8Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddS8(in_rDesc.m_Max.m_s8Value);
-         }
-         if(in_rDesc.m_Step.m_s8Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddS8(in_rDesc.m_Step.m_s8Value);
-         }
-         break;
-
-      // Запись U8 параметров
-      case IVT_U8:
-         if(in_rDesc.m_Min.m_u8Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddU8(in_rDesc.m_Min.m_u8Value);
-         }
-         if(in_rDesc.m_Max.m_u8Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddU8(in_rDesc.m_Max.m_u8Value);
-         }
-         if(in_rDesc.m_Step.m_u8Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddU8(in_rDesc.m_Step.m_u8Value);
-         }
-         break;
-
-      // Запись S16 параметров
-      case IVT_S16:
-         if(in_rDesc.m_Min.m_s16Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddS16LE(in_rDesc.m_Min.m_s16Value);
-         }
-         if(in_rDesc.m_Max.m_s16Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddS16LE(in_rDesc.m_Max.m_s16Value);
-         }
-         if(in_rDesc.m_Step.m_s16Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddS16LE(in_rDesc.m_Step.m_s16Value);
-         }
-         break;
-
-      // Запись U16 параметров
-      case IVT_U16:
-         if(in_rDesc.m_Min.m_u16Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddU16LE(in_rDesc.m_Min.m_u16Value);
-         }
-         if(in_rDesc.m_Max.m_u16Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddU16LE(in_rDesc.m_Max.m_u16Value);
-         }
-         if(in_rDesc.m_Step.m_u16Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddU16LE(in_rDesc.m_Step.m_u16Value);
-         }
-         break;
-
-      // Запись S32 параметров
-      case IVT_S32:
-         if(in_rDesc.m_Min.m_s32Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddS32LE(in_rDesc.m_Min.m_s32Value);
-         }
-         if(in_rDesc.m_Max.m_s32Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddS32LE(in_rDesc.m_Max.m_s32Value);
-         }
-         if(in_rDesc.m_Step.m_s32Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddS32LE(in_rDesc.m_Step.m_s32Value);
-         }
-         break;
-
-      // Запись U32 параметров
-      case IVT_U32:
-      // Запись параметров строки (максимальная длинна строки 32 бита)
-      // Минимум это минимальная длинна строки
-      // Максимум это максимальная длинна строки
-      // Шаг это шаг строки
-      case IVT_STRING8:
-      // Запись параметров массива (максимальная длинна массива 32 бита)
-      // Минимум это минимальная длинна массива
-      // Максимум это максимальная длинна массива
-      // Шаг это шаг массива
-      case IVT_ARRAY_U8:
-         if(in_rDesc.m_Min.m_u32Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddU32LE(in_rDesc.m_Min.m_u32Value);
-         }
-         if(in_rDesc.m_Max.m_u32Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddU32LE(in_rDesc.m_Max.m_u32Value);
-         }
-         if(in_rDesc.m_Step.m_u32Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddU32LE(in_rDesc.m_Step.m_u32Value);
-         }
-         break;
-
-      // Запись F32 параметров
-      case IVT_F32:
-         if(in_rDesc.m_Min.m_f32Value != 0.0f)
-         {
-            l_u8Flag |= (1 << 7);
-            AddF32LE(in_rDesc.m_Min.m_f32Value);
-         }
-         if(in_rDesc.m_Max.m_f32Value != 0.0f)
-         {
-            l_u8Flag |= (1 << 6);
-            AddF32LE(in_rDesc.m_Max.m_f32Value);
-         }
-         if(in_rDesc.m_Step.m_f32Value != 0.0f)
-         {
-            l_u8Flag |= (1 << 5);
-            AddF32LE(in_rDesc.m_Step.m_f32Value);
-         }
-         break;
-
-      // Запись S64 параметров
-      case IVT_S64:
-         if(in_rDesc.m_Min.m_s64Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddS64LE(in_rDesc.m_Min.m_s64Value);
-         }
-         if(in_rDesc.m_Max.m_s64Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddS64LE(in_rDesc.m_Max.m_s64Value);
-         }
-         if(in_rDesc.m_Step.m_s64Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddS64LE(in_rDesc.m_Step.m_s64Value);
-         }
-         break;
-
-      // Запись U64 параметров
-      case IVT_U64:
-         if(in_rDesc.m_Min.m_u64Value)
-         {
-            l_u8Flag |= (1 << 7);
-            AddU64LE(in_rDesc.m_Min.m_u64Value);
-         }
-         if(in_rDesc.m_Max.m_u64Value)
-         {
-            l_u8Flag |= (1 << 6);
-            AddU64LE(in_rDesc.m_Max.m_u64Value);
-         }
-         if(in_rDesc.m_Step.m_u64Value)
-         {
-            l_u8Flag |= (1 << 5);
-            AddU64LE(in_rDesc.m_Step.m_u64Value);
-         }
-         break;
-
-      // Запись F64 параметров
-      case IVT_F64:
-         if(in_rDesc.m_Min.m_f64Value != 0.0)
-         {
-            l_u8Flag |= (1 << 7);
-            AddF64LE(in_rDesc.m_Min.m_f64Value);
-         }
-         if(in_rDesc.m_Max.m_f64Value != 0.0)
-         {
-            l_u8Flag |= (1 << 6);
-            AddF64LE(in_rDesc.m_Max.m_f64Value);
-         }
-         if(in_rDesc.m_Step.m_f64Value != 0.0)
-         {
-            l_u8Flag |= (1 << 5);
-            AddF64LE(in_rDesc.m_Step.m_f64Value);
-         }
-         break;
-
-      // Запись Time параметров
-      case IVT_TIME:
-         l_u8Flag |= (7 << 5);
-         AddTime(in_rDesc.m_Min.m_Time);
-         AddTime(in_rDesc.m_Max.m_Time);
-         AddTime(in_rDesc.m_Step.m_Time);
-         break;
-
-      default:
-         SetError();
-         break;
-      }
-
-      // Добавление единиц измерения
-      if(in_rDesc.m_u16Units)
-      {
-         l_u8Flag |= (1 << 4);
-         AddU16LE(in_rDesc.m_u16Units);
-      }
-
-      // Запишем значение типа
-      l_u8Type |= l_u8Flag;
-      SetAnchorLE(l_pAnchor, &l_u8Type, 1);
-   }
+   // Добавление минимального, максимального, шагового значения и единицы измерения
+   AddMinMaxStepUnit(in_rDesc.m_u8Type, in_rDesc.m_Min, in_rDesc.m_Max, in_rDesc.m_Step, in_rDesc.m_u16Units);
 
    // Добавление текстового описания канала
 #if defined(IRIDIUM_MCU_AVR)
@@ -496,6 +254,273 @@ void CIridiumOutBuffer::AddChannelDescription(iridium_channel_description_t& in_
       l_u8Temp = 0x80 | ((l_u8Temp - 1) & 0x1F);
    // Запишем количество глобальных переменных связзанных с каналом управления
    SetAnchorLE(l_pAnchor, &l_u8Temp, 1);
+}
+
+/**
+   Добавление минимального, максимального, шагового значения и единиц измерения
+   на входе    :  in_u8Type   - тип значения
+                  in_rMin     - ссылка на минимальное значение
+                  in_rMax     - ссылка на максимальное значение
+                  in_rStep    - ссылка на шаговое значение
+                  in_u16Units - единицы измерения
+   на выходе   :  *
+*/
+void CIridiumOutBuffer::AddMinMaxStepUnit(u8 in_u8Type, universal_value_t& in_rMin, universal_value_t& in_rMax, universal_value_t& in_rStep, u16 in_u16Units)
+{
+   // Получение типа значения
+   u8 l_u8Flag = 0;
+   u8 l_u8Type = in_u8Type;
+   u8* l_pAnchor = CreateAnchor(1);
+   if(l_pAnchor)
+   {
+      switch(l_u8Type)
+      {
+      // Неопределенный тип
+      case IVT_NONE:
+         break;
+      // Запись бинарных параметров
+      case IVT_BOOL:
+         l_u8Flag |= (in_rMin.m_bValue << 7);
+         l_u8Flag |= (in_rMax.m_bValue << 6);
+         l_u8Flag |= (in_rStep.m_bValue << 5);
+         break;
+
+      // Запись S8 параметров
+      case IVT_S8:
+         if(in_rMin.m_s8Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddS8(in_rMin.m_s8Value);
+         }
+         if(in_rMax.m_s8Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddS8(in_rMax.m_s8Value);
+         }
+         if(in_rStep.m_s8Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddS8(in_rStep.m_s8Value);
+         }
+         break;
+
+      // Запись U8 параметров
+      case IVT_U8:
+         if(in_rMin.m_u8Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddU8(in_rMin.m_u8Value);
+         }
+         if(in_rMax.m_u8Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddU8(in_rMax.m_u8Value);
+         }
+         if(in_rStep.m_u8Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddU8(in_rStep.m_u8Value);
+         }
+         break;
+
+      // Запись S16 параметров
+      case IVT_S16:
+         if(in_rMin.m_s16Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddS16LE(in_rMin.m_s16Value);
+         }
+         if(in_rMax.m_s16Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddS16LE(in_rMax.m_s16Value);
+         }
+         if(in_rStep.m_s16Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddS16LE(in_rStep.m_s16Value);
+         }
+         break;
+
+      // Запись U16 параметров
+      case IVT_U16:
+         if(in_rMin.m_u16Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddU16LE(in_rMin.m_u16Value);
+         }
+         if(in_rMax.m_u16Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddU16LE(in_rMax.m_u16Value);
+         }
+         if(in_rStep.m_u16Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddU16LE(in_rStep.m_u16Value);
+         }
+         break;
+
+      // Запись S32 параметров
+      case IVT_S32:
+         if(in_rMin.m_s32Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddS32LE(in_rMin.m_s32Value);
+         }
+         if(in_rMax.m_s32Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddS32LE(in_rMax.m_s32Value);
+         }
+         if(in_rStep.m_s32Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddS32LE(in_rStep.m_s32Value);
+         }
+         break;
+
+      // Запись U32 параметров
+      case IVT_U32:
+      // Запись параметров строки (максимальная длинна строки 32 бита)
+      // Минимум это минимальная длинна строки
+      // Максимум это максимальная длинна строки
+      // Шаг это шаг строки
+      case IVT_STRING8:
+      // Запись параметров массива (максимальная длинна массива 32 бита)
+      // Минимум это минимальная длинна массива
+      // Максимум это максимальная длинна массива
+      // Шаг это шаг массива
+      case IVT_ARRAY_U8:
+         if(in_rMin.m_u32Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddU32LE(in_rMin.m_u32Value);
+         }
+         if(in_rMax.m_u32Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddU32LE(in_rMax.m_u32Value);
+         }
+         if(in_rStep.m_u32Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddU32LE(in_rStep.m_u32Value);
+         }
+         break;
+
+      // Запись F32 параметров
+      case IVT_F32:
+         if(in_rMin.m_f32Value != 0.0f)
+         {
+            l_u8Flag |= (1 << 7);
+            AddF32LE(in_rMin.m_f32Value);
+         }
+         if(in_rMax.m_f32Value != 0.0f)
+         {
+            l_u8Flag |= (1 << 6);
+            AddF32LE(in_rMax.m_f32Value);
+         }
+         if(in_rStep.m_f32Value != 0.0f)
+         {
+            l_u8Flag |= (1 << 5);
+            AddF32LE(in_rStep.m_f32Value);
+         }
+         break;
+
+      // Запись S64 параметров
+      case IVT_S64:
+         if(in_rMin.m_s64Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddS64LE(in_rMin.m_s64Value);
+         }
+         if(in_rMax.m_s64Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddS64LE(in_rMax.m_s64Value);
+         }
+         if(in_rStep.m_s64Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddS64LE(in_rStep.m_s64Value);
+         }
+         break;
+
+      // Запись U64 параметров
+      case IVT_U64:
+         if(in_rMin.m_u64Value)
+         {
+            l_u8Flag |= (1 << 7);
+            AddU64LE(in_rMin.m_u64Value);
+         }
+         if(in_rMax.m_u64Value)
+         {
+            l_u8Flag |= (1 << 6);
+            AddU64LE(in_rMax.m_u64Value);
+         }
+         if(in_rStep.m_u64Value)
+         {
+            l_u8Flag |= (1 << 5);
+            AddU64LE(in_rStep.m_u64Value);
+         }
+         break;
+
+      // Запись F64 параметров
+      case IVT_F64:
+         if(in_rMin.m_f64Value != 0.0)
+         {
+            l_u8Flag |= (1 << 7);
+            AddF64LE(in_rMin.m_f64Value);
+         }
+         if(in_rMax.m_f64Value != 0.0)
+         {
+            l_u8Flag |= (1 << 6);
+            AddF64LE(in_rMax.m_f64Value);
+         }
+         if(in_rStep.m_f64Value != 0.0)
+         {
+            l_u8Flag |= (1 << 5);
+            AddF64LE(in_rStep.m_f64Value);
+         }
+         break;
+
+      // Запись Time параметров
+      case IVT_TIME:
+         //l_u8Flag |= (7 << 5);
+         if(in_rMin.m_Time.m_u8Flags)
+         {
+            l_u8Flag |= (1 << 7);
+            AddTime(in_rMin.m_Time);
+         }
+         if(in_rMax.m_Time.m_u8Flags)
+         {
+            l_u8Flag |= (1 << 6);
+            AddTime(in_rMax.m_Time);
+         }
+         if(in_rStep.m_Time.m_u8Flags)
+         {
+            l_u8Flag |= (1 << 5);
+            AddTime(in_rStep.m_Time);
+         }
+         break;
+
+      default:
+         SetError();
+         break;
+      }
+
+      // Добавление единиц измерения
+      if(in_u16Units)
+      {
+         l_u8Flag |= (1 << 4);
+         AddU16LE(in_u16Units);
+      }
+
+      // Запишем значение типа
+      l_u8Type |= l_u8Flag;
+      SetAnchorLE(l_pAnchor, &l_u8Type, 1);
+   }
 }
 
 /**

@@ -69,12 +69,10 @@
 #define IRIDIUM_MESSAGE_STREAM_CLOSE               0x52  // Закрытие потока
 // Работа со сценариями
 #define IRIDIUM_MESSAGE_GET_SCENARIOS              0x60  // Получение списка сценариев
-#define IRIDIUM_MESSAGE_GET_SCENARIO_ACTIONS       0x61  // Получение данных сценария
-#define IRIDIUM_MESSAGE_SET_SCENARIO_ACTIONS       0x62  // Изменение данных сценария
-#define IRIDIUM_MESSAGE_GET_SCENARIO_VARIABLES     0x63  // Получение списка глобальных переменных сценария
-#define IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES     0x64  // Изменение списка глобальных переменных сценария
+#define IRIDIUM_MESSAGE_GET_SCENARIO               0x61  // Получение данных сценария
+#define IRIDIUM_MESSAGE_SET_SCENARIO               0x62  // Изменение данных сценария
 
-#define IRIDIUM_MESSAGE_MAX                        IRIDIUM_MESSAGE_SET_SCENARIO_VARIABLES // Максимальный номер сообщения
+#define IRIDIUM_MESSAGE_MAX                        IRIDIUM_MESSAGE_SET_SCENARIO // Максимальный номер сообщения
 
 // Группа клиента который подключается к серверу
 enum eIridiumGroup
@@ -98,14 +96,25 @@ enum eIridiumGroup
 #define IRIDIUM_DEVICE_FLAG_UTILITY                0x01  // [0000 0001] Устройство обладает свойствами утилиты
 
 // Флаги запросов списка каналов
-// [D][N][0][0][0][0][0][0]
+// [D][N][G][V][I][R][P][0]
 //  |  |  |  |  |  |  |  |
-//  |  |  +--+--+--+--+--+--- Зарезервировано, должны быть равны 0
+//  |  |  |  |  |  |  |  +--- Зарезервировано, должны быть равны 0
+//  |  |  |  |  |  |  +------ В ответ можно добавлять данные с разбивкой пакета
+//  |  |  |  |  |  +--------- В ответ нужно добавить минимальное, максимальное и шаговое значение
+//  |  |  |  |  +------------ В ответ нужно добавить информацию о диапазоне (индекс)
+//  |  |  |  +--------------- В ответ нужно добавить текущее значени
+//  |  |  +------------------ В ответ нужно список связанных с каналом глобальных переменных
 //  |  +--------------------- В ответ не нужно добавлять имя канала
 //  +------------------------ В ответ нужно добавить информацию о Device API
+
 #define IRIDIUM_REQUEST_FLAG_DEVICE_API            0x80  // [1000 0000] Запрос списка каналов с данными Device API
 #define IRIDIUM_REQUEST_FLAG_WITHOUT_NAME          0x40  // [0100 0000] Запрос списка каналов без имени каналов
-#define IRIDIUM_REQUEST_FLAG_MASK                  0xC0  // [1100 0000] Маска запроса списка каналов
+#define IRIDIUM_REQUEST_FLAG_VARIABLE              0x20  // [0010 0000] Запрос списка каналов c связанными глобальными переменными
+#define IRIDIUM_REQUEST_FLAG_VALUE                 0x10  // [0001 0000] Запрос списка каналов с текущим значение канала
+#define IRIDIUM_REQUEST_FLAG_RANGE                 0x08  // [0000 1000] Запрос списка каналов с применением диапазона
+#define IRIDIUM_REQUEST_FLAG_MMS                   0x04  // [0000 0100] Запрос списка каналов с минимальным, максимальным и шаговым значением
+#define IRIDIUM_REQUEST_FLAG_ENABLE_PARTS          0x02  // [0000 0010] Запрос списка каналов с возможностью разбивки пакета
+#define IRIDIUM_REQUEST_FLAG_MASK                  0xFC  // [1111 1110] Маска запроса списка каналов
 
 // Режим работы с потоком
 enum eIridiumStreamMode
@@ -245,7 +254,8 @@ typedef struct iridium_device_info_s
    u32   m_u32Channels;                            // Количество каналов управления на устройстве
    u32   m_u32Tags;                                // Количество каналов обратной связи
    u32   m_u32UserID;                              // Определенный пользователем идентификатор
-   u16   m_u16Change;                              // Версия изменения
+   u16   m_u16Change;                              // Счетчик изменений
+   u8    m_u8Scenarios;                            // Максимальное количество сценариев
 
 #ifdef IRIDIUM_MCU_AVR
    // Структра для хранения типа памяти в которой хранятся данные
@@ -340,6 +350,13 @@ typedef struct iridium_channel_description_s
    u8                      m_u8Variables;          // Количество идентификаторов глобальных переменных связанных с каналом управления
    u16*                    m_pVariables;           // Указатель на массив идентификаторов глобальных переменных связанных с каналом управления
 } iridium_channel_description_t;
+
+// Структкра данных сценария
+typedef struct iridium_scenario_s
+{
+   u8    m_u8Actions;                              // Количество действий сценария
+   u16   m_u16Variables;                           // Указатель на список глобальных переменных связанных с сценариями
+} iridium_scenario_t;
 
 // Структура для хранения параметров действия сценария
 typedef struct iridium_scenario_action_s

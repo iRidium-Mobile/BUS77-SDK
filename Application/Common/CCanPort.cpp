@@ -15,6 +15,7 @@ CCANPort::CCANPort()
    memset(&m_aPacketBuffer, 0, sizeof(m_aPacketBuffer));
    m_stPacketSize = 0;
    m_bTransmite = false;
+   m_pAccess = NULL;
 }
 
 /**
@@ -77,6 +78,10 @@ bool CCANPort::AddFrame(can_frame_t* in_pFrame)
 {
    bool l_bResult = false;
 
+   // Запрещение прерывания получения CAN пакетов
+   if(m_pAccess)
+      m_pAccess(this, 0);
+
    // Проверка наличия места в буфере
    if(m_InBuffer.m_stCount < m_InBuffer.m_stMax)
    {
@@ -84,7 +89,13 @@ bool CCANPort::AddFrame(can_frame_t* in_pFrame)
       memcpy(m_InBuffer.m_pBuffer + m_InBuffer.m_stCount, in_pFrame, sizeof(can_frame_t));
       m_InBuffer.m_stCount++;
       l_bResult = true;
-   }
+   } else
+      l_bResult = false;
+
+   // Разрешение прерывания получения CAN пакетов
+   if(m_pAccess)
+      m_pAccess(this, 1);
+
    return l_bResult;
 }
 
@@ -123,6 +134,7 @@ bool CCANPort::AddPacket(bool in_bBroadcast, u8 in_u8Address, void* in_pBuffer, 
                                  (in_bBroadcast << IRIDIUM_EXT_ID_BROADCAST_SHIFT) |
                                  (in_u8Address << IRIDIUM_EXT_ID_ADDRESS_SHIFT) |
                                  (l_u8Frames == (i + 1));
+
          l_pFrame->m_u8Size = (l_stSize < 8) ? l_stSize : 8;
          // Копирование данных
          memcpy(l_pFrame->m_aData, l_pPtr, l_pFrame->m_u8Size);
@@ -169,6 +181,8 @@ bool CCANPort::GetPacket(void*& out_rBuffer, size_t& out_rSize)
             break;
          }
       }
+      if(m_InBuffer.m_stCount == m_InBuffer.m_stMax)
+        m_InBuffer.m_stCount = 0;  
    }
 
    // Если данные получены, вернем указатель и длинну пакета
@@ -199,6 +213,10 @@ void CCANPort::DeletePacket()
 */
 void CCANPort::Flush()
 {
+   // Запрещение прерывания получения CAN пакетов
+   if(m_pAccess)
+      m_pAccess(this, 0);
+
    // Сборка пакета
    can_frame_t* l_pEnd = m_InBuffer.m_pBuffer + m_InBuffer.m_stCount;
    can_frame_t* l_pCur = m_InBuffer.m_pBuffer;
@@ -218,6 +236,9 @@ void CCANPort::Flush()
       } else
          l_pCur++;
    }
+   // Разрешение прерывания получения CAN пакетов
+   if(m_pAccess)
+      m_pAccess(this, 1);
 }
 
 /**
@@ -237,7 +258,7 @@ can_frame_t* CCANPort::GetFrame()
 }
 
 /**
-Удаление фрейма по индексу
+   Удаление фрейма
    на входе    :  *
    на выходе   :  *
 */
@@ -262,12 +283,13 @@ size_t CCANPort::Assembly(can_frame_t* in_pEnd, void* out_pBuffer, size_t in_stS
 {
    size_t l_stResult = 0;
    u8* l_pOut = (u8*)out_pBuffer;
-   u32 l_u32ID = in_pEnd->m_u32ExtID & IRIDIUM_EXT_ID_COMPARE_MASK;
+   u32 l_u32Mask = IRIDIUM_EXT_ID_COMPARE_MASK;
+   u32 l_u32ID = in_pEnd->m_u32ExtID & l_u32Mask;
    // Сборка пакета
    for(can_frame_t* l_pCur = m_InBuffer.m_pBuffer; l_pCur <= in_pEnd; l_pCur++)
    {
       // Поиск фрейма с указанными параметрами
-      if((l_pCur->m_u32ExtID & IRIDIUM_EXT_ID_COMPARE_MASK) == l_u32ID)
+      if((l_pCur->m_u32ExtID & l_u32Mask) == l_u32ID)
       {
          // Получение размера
          size_t l_stSize = (in_stSize > l_pCur->m_u8Size) ? l_pCur->m_u8Size : in_stSize;

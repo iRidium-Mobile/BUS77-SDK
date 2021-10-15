@@ -47,6 +47,7 @@ public:
    void AddDescription(iridium_description_t& in_rDesc);
    void AddTagDescription(iridium_tag_description_t& in_rDesc);
    void AddChannelDescription(iridium_channel_description_t& in_rDesc);
+   void AddMinMaxStepUnit(u8 in_u8Type, universal_value_t& in_rMin, universal_value_t& in_rMax, universal_value_t& in_rStep, u16 in_u16Units);
 
    // Установка флага окончания данных
    void SetMessageHeaderEnd(bool in_bEnd);

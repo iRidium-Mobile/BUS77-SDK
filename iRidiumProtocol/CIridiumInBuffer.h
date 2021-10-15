@@ -73,6 +73,7 @@ public:
    bool GetDescription(iridium_description_t& out_rDesc);
    bool GetTagDescription(iridium_tag_description_t& out_rDesc);
    bool GetChannelDescription(iridium_channel_description_t& out_rDesc);
+   bool GetMinMaxStepUnits(u8& out_rType, universal_value_t& out_rMin, universal_value_t& out_rMax, universal_value_t& out_rStep, u16& out_rUnits);
 
 protected:
    iridium_packet_t        m_Packet;               // Данные пакета

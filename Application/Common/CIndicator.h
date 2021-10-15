@@ -18,35 +18,35 @@ enum eIndicatorMode
    INDICATOR_MODE_BOOTLOADER,                      // Работа в бутлоадере
    INDICATOR_MODE_WORK,                            // Обычный режим без ошибки
    // Группа 1
-   INDICATOR_MODE_1_1   = 0x11,                    // -, .
-   INDICATOR_MODE_1_2,                             // -, ..
-   INDICATOR_MODE_1_3,                             // -, ...
-   INDICATOR_MODE_1_4,                             // -, ....
-   INDICATOR_MODE_1_5,                             // -, .....
+   INDICATOR_MODE_1_1   = 0x11,                    // -, .        Критическая ошибка/аппаратная неисправность (чтение памяти, инициализация трансивера)
+   INDICATOR_MODE_1_2,                             // -, ..       Обрыв или КЗ
+   INDICATOR_MODE_1_3,                             // -, ...      Зарезервировано
+   INDICATOR_MODE_1_4,                             // -, ....     Зарезервировано
+   INDICATOR_MODE_1_5,                             // -, .....    Общая ошибка линии
    // Группа 2
-   INDICATOR_MODE_2_1   = 0x21,                    // --, .
-   INDICATOR_MODE_2_2,                             // --, ..
-   INDICATOR_MODE_2_3,                             // --, ...
-   INDICATOR_MODE_2_4,                             // --, ....
-   INDICATOR_MODE_2_5,                             // --, .....
+   INDICATOR_MODE_2_1   = 0x21,                    // --, .       Зарезервировано
+   INDICATOR_MODE_2_2,                             // --, ..      Низкое напряжение питания устройства
+   INDICATOR_MODE_2_3,                             // --, ...     Низкий заряд встроенной батареи
+   INDICATOR_MODE_2_4,                             // --, ....    Перегрев устройства
+   INDICATOR_MODE_2_5,                             // --, .....   Зарезервировано
    // Группа 3
-   INDICATOR_MODE_3_1   = 0x31,                    // ---, .
-   INDICATOR_MODE_3_2,                             // ---, ..
-   INDICATOR_MODE_3_3,                             // ---, ...
-   INDICATOR_MODE_3_4,                             // ---, ....
-   INDICATOR_MODE_3_5,                             // ---, .....
+   INDICATOR_MODE_3_1   = 0x31,                    // ---, .      Зарезервировано
+   INDICATOR_MODE_3_2,                             // ---, ..     Зарезервировано
+   INDICATOR_MODE_3_3,                             // ---, ...    Зарезервировано
+   INDICATOR_MODE_3_4,                             // ---, ....   Зарезервировано
+   INDICATOR_MODE_3_5,                             // ---, .....  Зарезервировано
    // Группа 4
-   INDICATOR_MODE_4_1   = 0x41,                    // ----, .
-   INDICATOR_MODE_4_2,                             // ----, ..
-   INDICATOR_MODE_4_3,                             // ----, ...
-   INDICATOR_MODE_4_4,                             // ----, ....
-   INDICATOR_MODE_4_5,                             // ----, .....
+   INDICATOR_MODE_4_1   = 0x41,                    // ----, .     Зарезервировано
+   INDICATOR_MODE_4_2,                             // ----, ..    Зарезервировано
+   INDICATOR_MODE_4_3,                             // ----, ...   Зарезервировано
+   INDICATOR_MODE_4_4,                             // ----, ....  Зарезервировано
+   INDICATOR_MODE_4_5,                             // ----, ..... Зарезервировано
    // Группа 5
-   INDICATOR_MODE_5_1   = 0x51,                    // -----, .
-   INDICATOR_MODE_5_2,                             // -----, ..
-   INDICATOR_MODE_5_3,                             // -----, ...
-   INDICATOR_MODE_5_4,                             // -----, ....
-   INDICATOR_MODE_5_5,                             // -----, .....
+   INDICATOR_MODE_5_1   = 0x51,                    // -----, .    Зарезервировано
+   INDICATOR_MODE_5_2,                             // -----, ..   Зарезервировано
+   INDICATOR_MODE_5_3,                             // -----, ...  Зарезервировано
+   INDICATOR_MODE_5_4,                             // -----, .... Зарезервировано
+   INDICATOR_MODE_5_5,                             // -----, .....Зарезервировано
 };
 
 class CIndicator
@@ -72,7 +72,8 @@ public:
       { return m_u8Color; }
    // Установка времени мерцания
    void SetBlinkTime(u32 in_u32Time);
-
+   u32 GetBlinkTime()
+      { return m_u32Blink; }
    // Обработка индикатора
    void Work();
 

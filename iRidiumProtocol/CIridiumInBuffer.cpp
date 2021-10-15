@@ -169,160 +169,9 @@ bool CIridiumInBuffer::GetDeviceInfo(iridium_device_info_t& out_rInfo)
 bool CIridiumInBuffer::GetDescription(iridium_description_t& out_rDesc)
 {
    bool l_bResult = false;
-   bool l_bMin = false;
-   bool l_bMax = false;
-   bool l_bStep = false;
-   bool l_bUnits = false;
-
    memset(&out_rDesc, 0, sizeof(iridium_description_t));
-   out_rDesc.m_u8Type = IVT_NONE;
-
-   // Получение типа значения
-   l_bResult = GetU8(out_rDesc.m_u8Type);
-   if(l_bResult)
-   {
-      // Проверка наличия данных
-      l_bMin = (0 != (out_rDesc.m_u8Type & 0x80));
-      l_bMax = (0 != (out_rDesc.m_u8Type & 0x40));
-      l_bStep = (0 != (out_rDesc.m_u8Type & 0x20));
-      l_bUnits = (0 != (out_rDesc.m_u8Type & 0x10));
-      // Отделение типа
-      out_rDesc.m_u8Type &= 0x0F;
-      switch(out_rDesc.m_u8Type)
-      {
-      // Если тип не определен
-      case IVT_NONE:
-         break;
-      // Получение бинарного значения
-      case IVT_BOOL:
-         out_rDesc.m_Min.m_bValue = l_bMin;
-         out_rDesc.m_Max.m_bValue = l_bMax;
-         out_rDesc.m_Step.m_bValue = l_bStep;
-         break;
-      // Получение S8 значения
-      case IVT_S8:
-         if(l_bMin)
-            l_bResult = GetS8(out_rDesc.m_Min.m_s8Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetS8(out_rDesc.m_Max.m_s8Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetS8(out_rDesc.m_Step.m_s8Value);
-         break;
-      // Получение U8 значения
-      case IVT_U8:
-         if(l_bMin)
-            l_bResult = GetU8(out_rDesc.m_Min.m_u8Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetU8(out_rDesc.m_Max.m_u8Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetU8(out_rDesc.m_Step.m_u8Value);
-         break;
-      // Получение S16 значения
-      case IVT_S16:
-         if(l_bMin)
-            l_bResult = GetS16LE(out_rDesc.m_Min.m_s16Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetS16LE(out_rDesc.m_Max.m_s16Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetS16LE(out_rDesc.m_Step.m_s16Value);
-         break;
-      // Получение U16 значения
-      case IVT_U16:
-         if(l_bMin)
-            l_bResult = GetU16LE(out_rDesc.m_Min.m_u16Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetU16LE(out_rDesc.m_Max.m_u16Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetU16LE(out_rDesc.m_Step.m_u16Value);
-         break;
-      // Получение S32 значения
-      case IVT_S32:
-         if(l_bMin)
-            l_bResult = GetS32LE(out_rDesc.m_Min.m_s32Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetS32LE(out_rDesc.m_Max.m_s32Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetS32LE(out_rDesc.m_Step.m_s32Value);
-         break;
-      // Получение U32 значения
-      case IVT_U32:
-      // Получение параметров строки
-      case IVT_STRING8:
-      // Получение параметров массва
-      case IVT_ARRAY_U8:
-         if(l_bMin)
-            l_bResult = GetU32LE(out_rDesc.m_Min.m_u32Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetU32LE(out_rDesc.m_Max.m_u32Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetU32LE(out_rDesc.m_Step.m_u32Value);
-         break;
-      // Получение F32 значения
-      case IVT_F32:
-         if(l_bMin)
-            l_bResult = GetF32LE(out_rDesc.m_Min.m_f32Value);
-         else
-            out_rDesc.m_Min.m_f32Value = 0.0f;
-         if(l_bMax && l_bResult)
-            l_bResult = GetF32LE(out_rDesc.m_Max.m_f32Value);
-         else
-            out_rDesc.m_Max.m_f32Value = 0.0f;
-         if(l_bStep && l_bResult)
-            l_bResult = GetF32LE(out_rDesc.m_Step.m_f32Value);
-         else
-            out_rDesc.m_Step.m_f32Value = 0.0f;
-         break;
-      // Получение S64 значения
-      case IVT_S64:
-         if(l_bMin)
-            l_bResult = GetS64LE(out_rDesc.m_Min.m_s64Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetS64LE(out_rDesc.m_Max.m_s64Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetS64LE(out_rDesc.m_Step.m_s64Value);
-         break;
-      // Получение U64 значения
-      case IVT_U64:
-         if(l_bMin)
-            l_bResult = GetU64LE(out_rDesc.m_Min.m_u64Value);
-         if(l_bMax && l_bResult)
-            l_bResult = GetU64LE(out_rDesc.m_Max.m_u64Value);
-         if(l_bStep && l_bResult)
-            l_bResult = GetU64LE(out_rDesc.m_Step.m_u64Value);
-         break;
-      // Получение F64 значения
-      case IVT_F64:
-         if(l_bMin)
-            l_bResult = GetF64LE(out_rDesc.m_Min.m_f64Value);
-         else
-            out_rDesc.m_Min.m_f64Value = 0.0;
-         if(l_bMax && l_bResult)
-            l_bResult = GetF64LE(out_rDesc.m_Max.m_f64Value);
-         else
-            out_rDesc.m_Max.m_f64Value = 0.0;
-         if(l_bStep && l_bResult)
-            l_bResult = GetF64LE(out_rDesc.m_Step.m_f64Value);
-         else
-            out_rDesc.m_Step.m_f64Value = 0.0;
-         break;
-      // Получение значения времени
-      case IVT_TIME:
-         if(l_bMin)
-            l_bResult = GetTime(out_rDesc.m_Min.m_Time);
-         if(l_bMax && l_bResult)
-            l_bResult = GetTime(out_rDesc.m_Max.m_Time);
-         if(l_bStep && l_bResult)
-            l_bResult = GetTime(out_rDesc.m_Step.m_Time);
-         break;
-      default:
-         l_bResult = false;
-         break;
-      }
-   }
-   // Получение единиц измерения
-   if(l_bUnits && l_bResult)
-      l_bResult = GetU16LE(out_rDesc.m_u16Units);
-
+   // Получение минимального, максимального, шагового значения и единиц измерения
+   l_bResult = GetMinMaxStepUnits(out_rDesc.m_u8Type, out_rDesc.m_Min, out_rDesc.m_Max, out_rDesc.m_Step, out_rDesc.m_u16Units);
    // Получение текстового описания канала
    if(l_bResult)
       l_bResult = GetString(out_rDesc.m_pszDescription);
@@ -422,5 +271,173 @@ bool CIridiumInBuffer::GetChannelDescription(iridium_channel_description_t& out_
          }
       }
    }
+   return l_bResult;
+}
+
+/**
+   Получение минимального, максимального, шагового значения и единиц измерения
+   на входе    :  out_rType   - ссылка на переменную куда нужно поместить тип значения
+                  out_rMin    - ссылка на структуру куд анужно поместить минимальное значение
+                  out_rMax    - ссылка на структуру куд анужно поместить максимальное значение
+                  out_rStep   - ссылка на структуру куд анужно поместить шаговое значение
+                  out_rUnits  - ссылка на переменную куда нужно поместить единицы измерения
+   на выходе   :  успешность получения данных
+*/
+bool CIridiumInBuffer::GetMinMaxStepUnits(u8& out_rType, universal_value_t& out_rMin, universal_value_t& out_rMax, universal_value_t& out_rStep, u16& out_rUnits)
+{
+   bool l_bResult = false;
+   bool l_bMin = false;
+   bool l_bMax = false;
+   bool l_bStep = false;
+   bool l_bUnits = false;
+
+   out_rType = IVT_NONE;
+
+   // Получение типа значения
+   l_bResult = GetU8(out_rType);
+   if(l_bResult)
+   {
+      // Проверка наличия данных
+      l_bMin = (0 != (out_rType & 0x80));
+      l_bMax = (0 != (out_rType & 0x40));
+      l_bStep = (0 != (out_rType & 0x20));
+      l_bUnits = (0 != (out_rType & 0x10));
+      // Отделение типа
+      out_rType &= 0x0F;
+      switch(out_rType)
+      {
+      // Если тип не определен
+      case IVT_NONE:
+         break;
+      // Получение бинарного значения
+      case IVT_BOOL:
+         out_rMin.m_bValue = l_bMin;
+         out_rMax.m_bValue = l_bMax;
+         out_rStep.m_bValue = l_bStep;
+         break;
+      // Получение S8 значения
+      case IVT_S8:
+         if(l_bMin)
+            l_bResult = GetS8(out_rMin.m_s8Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetS8(out_rMax.m_s8Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetS8(out_rStep.m_s8Value);
+         break;
+      // Получение U8 значения
+      case IVT_U8:
+         if(l_bMin)
+            l_bResult = GetU8(out_rMin.m_u8Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetU8(out_rMax.m_u8Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetU8(out_rStep.m_u8Value);
+         break;
+      // Получение S16 значения
+      case IVT_S16:
+         if(l_bMin)
+            l_bResult = GetS16LE(out_rMin.m_s16Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetS16LE(out_rMax.m_s16Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetS16LE(out_rStep.m_s16Value);
+         break;
+      // Получение U16 значения
+      case IVT_U16:
+         if(l_bMin)
+            l_bResult = GetU16LE(out_rMin.m_u16Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetU16LE(out_rMax.m_u16Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetU16LE(out_rStep.m_u16Value);
+         break;
+      // Получение S32 значения
+      case IVT_S32:
+         if(l_bMin)
+            l_bResult = GetS32LE(out_rMin.m_s32Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetS32LE(out_rMax.m_s32Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetS32LE(out_rStep.m_s32Value);
+         break;
+      // Получение U32 значения
+      case IVT_U32:
+      // Получение параметров строки
+      case IVT_STRING8:
+      // Получение параметров массва
+      case IVT_ARRAY_U8:
+         if(l_bMin)
+            l_bResult = GetU32LE(out_rMin.m_u32Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetU32LE(out_rMax.m_u32Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetU32LE(out_rStep.m_u32Value);
+         break;
+      // Получение F32 значения
+      case IVT_F32:
+         if(l_bMin)
+            l_bResult = GetF32LE(out_rMin.m_f32Value);
+         else
+            out_rMin.m_f32Value = 0.0f;
+         if(l_bMax && l_bResult)
+            l_bResult = GetF32LE(out_rMax.m_f32Value);
+         else
+            out_rMax.m_f32Value = 0.0f;
+         if(l_bStep && l_bResult)
+            l_bResult = GetF32LE(out_rStep.m_f32Value);
+         else
+            out_rStep.m_f32Value = 0.0f;
+         break;
+      // Получение S64 значения
+      case IVT_S64:
+         if(l_bMin)
+            l_bResult = GetS64LE(out_rMin.m_s64Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetS64LE(out_rMax.m_s64Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetS64LE(out_rStep.m_s64Value);
+         break;
+      // Получение U64 значения
+      case IVT_U64:
+         if(l_bMin)
+            l_bResult = GetU64LE(out_rMin.m_u64Value);
+         if(l_bMax && l_bResult)
+            l_bResult = GetU64LE(out_rMax.m_u64Value);
+         if(l_bStep && l_bResult)
+            l_bResult = GetU64LE(out_rStep.m_u64Value);
+         break;
+      // Получение F64 значения
+      case IVT_F64:
+         if(l_bMin)
+            l_bResult = GetF64LE(out_rMin.m_f64Value);
+         else
+            out_rMin.m_f64Value = 0.0;
+         if(l_bMax && l_bResult)
+            l_bResult = GetF64LE(out_rMax.m_f64Value);
+         else
+            out_rMax.m_f64Value = 0.0;
+         if(l_bStep && l_bResult)
+            l_bResult = GetF64LE(out_rStep.m_f64Value);
+         else
+            out_rStep.m_f64Value = 0.0;
+         break;
+      // Получение значения времени
+      case IVT_TIME:
+         if(l_bMin)
+            l_bResult = GetTime(out_rMin.m_Time);
+         if(l_bMax && l_bResult)
+            l_bResult = GetTime(out_rMax.m_Time);
+         if(l_bStep && l_bResult)
+            l_bResult = GetTime(out_rStep.m_Time);
+         break;
+      default:
+         l_bResult = false;
+         break;
+      }
+   }
+   // Получение единиц измерения
+   if(l_bUnits && l_bResult)
+      l_bResult = GetU16LE(out_rUnits);
+
    return l_bResult;
 }

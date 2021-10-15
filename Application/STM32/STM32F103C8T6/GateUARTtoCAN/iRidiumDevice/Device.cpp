@@ -178,6 +178,8 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* in_pCan)
    
    g_u32CAN_RCV++;
    
+   HAL_GPIO_TogglePin(Onboard_LED_GPIO_Port, Onboard_LED_Pin);
+
    // Включим прерыване обратно
    HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
 }
@@ -214,6 +216,8 @@ static bool SendToCAN()
       
       g_u32CAN_SND++;
       
+      HAL_GPIO_TogglePin(Onboard_LED_GPIO_Port, Onboard_LED_Pin);
+
       // Отправляем данные
       if(HAL_CAN_Transmit_IT(&hcan) == HAL_OK)
       {    
@@ -235,6 +239,12 @@ void HAL_CAN_TxCpltCallback(CAN_HandleTypeDef* in_pCan)
 {
    // Проверка свободен ли UART
    g_bCANTransmit = SendToCAN();
+}
+
+void HAL_CAN_ErrorCallback(CAN_HandleTypeDef* in_pCanHandle)
+{
+   // Включим прерывание обратно
+   HAL_CAN_Receive_IT(in_pCanHandle, CAN_FIFO0);
 }
 
 /**
@@ -477,7 +487,7 @@ void iRidiumDevice_Loop(void)
          пока старамеся включить всегда
       */
       // Попытаемся установить возможность приема
-      HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
+      //HAL_CAN_Receive_IT(&hcan, CAN_FIFO0);
    }
    // Отправка данных из CAN в UART
    CANtoUART();
